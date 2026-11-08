@@ -51,7 +51,7 @@ ok(JSON.parse(await store.get("hud_index")).join() === "2026-11-02,2026-11-09", 
 
 // ---- the placeholder count: empty fields, not *_notes, not skipped slides ----
 let ph = Hd.placeholders(c2.form);
-ok(ph.count === 2 && ph.keys.includes("announcements_2") && ph.keys.includes("schedule_tue"), "two empty fields count as placeholders");
+ok(ph.keys.includes("announcements_2") && ph.keys.includes("schedule_tue") && !ph.keys.includes("huddle_date"), "empty fields count as placeholders (v822: her week fields too; fixed/auto never)");
 ok(Hd.placeholders({ a: "", b_notes: "", c: [], d: [{ x: "", y: "1" }], e: null, skip_slides: [] }).count === 4, "empty string, empty list, nested empty, null; notes ignored");
 ok(Hd.placeholders({ tip_text: "", skip_slides: [11] }).count === 0, "a skipped section's fields are not counted");
 
@@ -66,7 +66,7 @@ ok(r[1].card.form.tip_text === "Answer every lead in 10 minutes" && r[1].card.se
 r = await page({ action: "skip", section: "recognition", on: true });
 ok(r[1].card.skip_slides.join() === "8" && r[1].card.sections.find((s) => s.id === "recognition").done, "Skip slide writes skip_slides and counts as done");
 r = await page({ action: "edit", section: "schedule", values: { schedule_tue: "Team training" } });
-ok(r[1].card.placeholders.count === 1, "filling a field lowers the placeholder count");
+ok(!r[1].card.placeholders.keys.includes("schedule_tue"), "filling a field takes it off the placeholder list");
 for (const s of ["theme", "announcements", "celebrations", "mantra"]) r = await page({ action: "same", section: s });
 ok(r[1].card.status === "Filling" && /market/.test(r[1].card.next_step), "one next step: pick the market topics");
 ok((await page({ action: "request_build" }))[0] === 409, "Build is refused until every section is done");

@@ -28,5 +28,5 @@ await Hd.cardAction(env, { date: "2026-11-16", action: "pick", ids: ["t1", "t2",
 const cp = [...store.m.keys()].filter((k) => k.startsWith("cp_item_")).map((k) => JSON.parse(store.m.get(k)));
 ok(cp.length === 1 && cp[0].topic.startsWith("Market research (Week of Mon 16 Nov 2026): "), "the Content Planner draft title carries the week");
 const pv = (await (await hr("/momo/work/huddle?key=K&date=2026-11-16")).text());
-ok(pv.includes("e(C.week_label)+' · presenter view"), "the slide preview footer carries the week");
+ok(pv.includes("e(C.week_label)+' · slide '"), "the slide preview footer carries the week");
 console.log("test_v816_huddle_week: " + n + " checks passed");

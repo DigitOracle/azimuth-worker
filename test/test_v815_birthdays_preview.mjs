@@ -49,7 +49,7 @@ ok(r.ok, "the page's actions go through the huddle api");
 page = await (await hr("/momo/work/huddle?key=K&date=2026-11-09")).text();
 const js = page.slice(page.indexOf("(function(){"));
 ok(/function preview\(id,keys\)/.test(js) && /h\+=preview\(id,keys\)/.test(js) && /h\+=preview\("market",\[\]\)/.test(js), "every section and the market sheet show the preview");
-ok(/How it will show \(tap to enlarge\)/.test(js) && /className="pvo"/.test(js) && /Last built slide/.test(js) && /Happy birthday, /.test(js), "tap to enlarge; the built slide when available; birthdays on the preview");
+ok(/Preview of the slide/.test(js) && /className="pvo"/.test(js) && /Last built slide/.test(js) && /PREVIEW/.test(js), "tap to enlarge; the built slide when available (v822: FN-palette previews, birthdays via cel_bday_body)");
 new Function(js.replace(/<\/script>[\s\S]*$/, "")); ok(true, "the card script parses");
 ok(!LOGS.join("\n").match(/Ruzanna|Testy|Zed Example|New Starter/), "no birthday name in any log line");
 console.log = console.log; process.stdout.write("test_v815_birthdays_preview: " + n + " checks passed\n");

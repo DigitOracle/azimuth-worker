@@ -33,19 +33,17 @@ export const HUD = "hud_card_", HUD_IDX = "hud_index", HUD_FILE = "hud_file_";
 export const STATUSES = ["Draft", "Filling", "Ready to build", "Built", "Approved", "Presented", "Closed"];
 export const MAX_FILE = 15 * 1024 * 1024, MAX_SLIDES = 15, MAX_TOPICS = 20, PICKS = 4, MAX_FORM_BYTES = 200000;
 
-// ---- THE SECTION MAP: the ONE place where her DNA form keys meet the card's sections ------------------------------------------------------------------
-// TODO(v810, field list): huddle-form-fields.json (146 fields) and huddle/TEMPLATE.md are on Najjuko's Mac and were not sent. When they arrive:
-//   1. put every key into FIELD_SECTION (exact key -> section id), taken from the "card section" column of huddle-form-fields.json;
-//   2. trim the guessed PREFIXES below (they only catch keys FIELD_SECTION does not list);
-//   3. fill DATE_FIELDS (the keys that hold the huddle's dates, rewritten when Thursday copies the card) and THEME_TITLE_KEY;
-//   4. check SEGMENTS[].slides against TEMPLATE.md's run of show.
-// Until then a key is placed by FIELD_SECTION, else by a slide-number prefix (s04_..., slide4_..., slide_04_...), else by a name prefix; a key that
-// matches nothing is shown under "Other fields" so nothing is lost or hidden. The form itself is stored and returned exactly as her DNA JSON.
-export const FIELD_SECTION = {
-  // "theme_title": "theme",   <- one line per DNA key, e.g.
-};
-export const DATE_FIELDS = [];          // e.g. ["huddle_date", "date_display"]: rewritten for the new Monday when a card is copied (only keys already present)
-export const THEME_TITLE_KEY = "";      // e.g. "theme_title": names the meeting record on Close
+// ---- THE SECTION MAP (v822: filled from Najjuko's huddle-form-fields.json, 146 fields; src/huddle_fields.js keeps the list in her edition order) -----------
+// Every field has its card section, slide label, source, type and a maximum of about 1.3 x the longest used so far. Fixed / Auto / team-mantra fields are
+// read-only on the card. A key she adds that is not in the list still rides along in the form and is listed under "Other fields"; the edition the bridge
+// hands to render_edition.py is exactly her field list, in her order, empty = "" (her gold [placeholder]).
+import { HUDDLE_FIELDS } from "./huddle_fields.js";
+export const FIELD_META = Object.fromEntries(HUDDLE_FIELDS.map((r) => [r[0], { slide: r[1], label: r[2], section: r[3], source: r[4], type: r[5], longest: r[6], max: r[7], editable: r[8] }]));
+export const FIELD_SECTION = Object.fromEntries(HUDDLE_FIELDS.filter((r) => r[3]).map((r) => [r[0], r[3]]));
+export const DATE_FIELDS = ["huddle_date"];          // rewritten for the new Monday when a card is copied
+export const AUTO_NEXT = "next_huddle";               // "Auto: next Monday"
+export const THEME_TITLE_KEY = "cover_title_line1";   // names the meeting record on Close
+export const fieldsOf = (sid) => HUDDLE_FIELDS.filter((r) => r[3] === sid).map((r) => r[0]);
 export const SECTIONS = [
   { id: "theme", name: "Theme & clip", slides: [1, 3], prefixes: ["theme", "clip", "motivation", "video", "youtube"], source: "Najjuko (Ali sometimes suggests the clip)" },
   { id: "market", name: "Market", slides: [4, 5, 6, 7], prefixes: ["market"], source: "Najma (read-only) + public sources" },
@@ -65,7 +63,7 @@ export const SEGMENTS = [
   { n: "01", name: "Motivation", min: 4, slides: [1, 2, 3] }, { n: "02", name: "Market", min: 7, slides: [4, 5, 6, 7] },
   { n: "03", name: "Recognition", min: 3, slides: [8] }, { n: "04", name: "Updates, celebrations & tip", min: 6, slides: [9, 10, 11] },
   { n: "05", name: "Weekly focus", min: 3, slides: [12] }, { n: "06", name: "Q&A", min: 3, slides: [13] },
-  { n: "07", name: "Shout-outs", min: 3, slides: [] }, { n: "08", name: "Mantra", min: 2, slides: [14, 15] },
+  { n: "07", name: "Shout-outs", min: 3, slides: [13] }, { n: "08", name: "Mantra", min: 2, slides: [14, 15] },   // v822 - TEMPLATE.md: 13 = Q&A + shout-outs
 ];
 export const HOSTS = ["Ali Kalhor", "Najjuko"];   // hierarchy: wherever people are shown, Ali Kalhor sits above Najjuko
 
@@ -112,12 +110,27 @@ export function placeholders(form) {
   const f = form || {}, skip = new Set((Array.isArray(f.skip_slides) ? f.skip_slides : []).map(Number)), keys = [];
   for (const k of Object.keys(f)) {
     if (k === "skip_slides" || /_notes$/i.test(k)) continue;
-    const sid = sectionOfKey(k); if (sid && SEC[sid].slides.every((n) => skip.has(n))) continue;
+    const sid = sectionOfKey(k); if (sid && SEC[sid] && SEC[sid].slides.every((n) => skip.has(n))) continue;
+    if (FIELD_META[k] && !FIELD_META[k].editable) continue;   // v822 - fixed / auto fields are not hers to fill
     for (const [p, v] of leaves(f[k], k, [])) if (isEmpty(v)) keys.push(p);
   }
   return { count: keys.length, keys };
 }
 
+// v822 - the edition JSON, exactly her field list and order; empty = "" (skip_slides = []), the dates set by the week
+const LONGDAY = (d) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date(d + "T00:00:00Z").getUTCDay()] + " " + Number(d.slice(8)) + " " + ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][Number(d.slice(5, 7)) - 1] + " " + d.slice(0, 4);
+export function editionOf(c) {
+  const o = {};
+  for (const r of HUDDLE_FIELDS) {
+    const k = r[0]; let v = c.form[k];
+    if (k === "huddle_date" && (v == null || v === "")) v = c.date;
+    if (k === AUTO_NEXT && (v == null || v === "")) v = LONGDAY(addDays(c.date, 7));
+    if (v == null) v = k === "skip_slides" ? [] : "";
+    o[k] = clone(v);
+  }
+  return o;
+}
+export const editionPlaceholders = (c) => placeholders(editionOf(c));
 // ---- the card --------------------------------------------------------------------------------------------------------------------------------------------
 const clone = (o) => JSON.parse(JSON.stringify(o == null ? null : o));
 export async function getCard(env, date) { if (!dOk(date)) return null; try { return JSON.parse(await env.MEETINGS.get(HUD + date)); } catch (e) { return null; } }
@@ -133,7 +146,8 @@ async function prevCard(env, date) { const idx = (await cardIndex(env)).filter((
 export async function createCard(env, date, nowIso, deps) {
   const have = await getCard(env, date); if (have) return have;
   const prev = await prevCard(env, date), form = prev ? clone(prev.form) || {} : {};
-  for (const k of DATE_FIELDS) if (k in form) form[k] = date;
+  for (const k of DATE_FIELDS) form[k] = date;
+  form[AUTO_NEXT] = LONGDAY(addDays(date, 7));   // v822 - "Auto: next Monday"
   if (Array.isArray(form.skip_slides)) form.skip_slides = [];   // a skip is for one week only
   const c = { v: 1, date, status: "Draft", created: nowIso || new Date().toISOString(), prev_date: prev ? prev.date : "", form, sections: {}, drafted: {},
     market: { topics: [], picked: [], why: {}, momo_pending: false, by: "" }, build: null, build_requested: null, approved: null, presenter: { done: {}, notes: {} }, record_id: "", log: [],
@@ -203,7 +217,7 @@ async function prefill(env, c, prev, deps) {
     const out = [];
     for (let i = 0; i < 4; i++) { const d = addDays(c.date, i); let v = null; try { v = await deps.cal(env, d); } catch (e) {}
       if (!v || !v.connected) { out.length = 0; M.notes.push("Calendar not connected: schedule left for you."); break; }
-      const ev = (v.events || []).slice(0, 4).map((x) => (x.all_day ? "" : x.time + " ") + x.title);
+      const ev = (v.events || []).slice(0, 4).map((x) => (x.all_day ? "" : x.time + " ") + x.title); deps.calEvents = deps.calEvents || {}; deps.calEvents[d] = (v.events || []).filter((x) => !x.all_day);
       out.push(niceDate(d) + ": " + (ev.length ? ev.join("; ") : "nothing booked")); }
     M.schedule = out.length ? { lines: out, accepted: false } : null;
   } else { M.schedule = null; M.notes.push("Calendar not read here: schedule left for you."); }
@@ -216,8 +230,30 @@ async function prefill(env, c, prev, deps) {
   for (const g of ["Speed wins: reply to every lead in 10 minutes.", "One client, one follow-up, every day.", "Know the market: one figure each before every call."]) if (th.length < 3) th.push(g);
   M.theme = { lines: th.slice(0, 3), accepted: false };
   c.momo = M; momoMarket(c);
+  fillFromMomo(c, prev, deps.calEvents || null);
 }
 
+// v822 - Momo fills the edition fields it already knows, every week: celebrations (cel_bday_body, cel_days_body) and the schedule (week_range,
+// day1-4_name/date, and event/time from her calendar when connected; otherwise the day's event fields start empty, last week's are not carried).
+// Recognition (rec_*) is never touched: unchanged unless the sales director sends an update. A list field keeps the shape last week's used (array or lines).
+const SHORT = (d) => Number(d.slice(8)) + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(d.slice(5, 7)) - 1];
+export const weekRange = (d) => { const e = addDays(d, 6); return d.slice(5, 7) === e.slice(5, 7) ? Number(d.slice(8)) + "–" + SHORT(e) + " " + e.slice(0, 4) : SHORT(d) + " – " + SHORT(e) + " " + e.slice(0, 4); };
+const asList = (lines, like) => (Array.isArray(like) ? lines.slice() : lines.join("\n"));
+export function celebrationValues(c) {
+  const md = (c.momo || {}).celebrations || {};
+  return { cel_bday_body: (md.birthdays || []).filter((x) => x.on).map((x) => x.name + " · " + x.when), cel_days_body: (md.lines || []).slice() };
+}
+function fillFromMomo(c, prev, cal) {
+  const f = c.form, filled = [], put = (k, v) => { f[k] = v; filled.push(k); };
+  const cv = celebrationValues(c); put("cel_bday_body", asList(cv.cel_bday_body, prev && prev.form.cel_bday_body)); put("cel_days_body", asList(cv.cel_days_body, prev && prev.form.cel_days_body));
+  put("week_range", weekRange(c.date));
+  const DN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  for (let i = 0; i < 4; i++) { const d = addDays(c.date, i), ev = cal && cal[d] && cal[d][0];
+    put("day" + (i + 1) + "_name", DN[new Date(d + "T00:00:00Z").getUTCDay()]); put("day" + (i + 1) + "_date", SHORT(d));
+    for (const x of ["event", "place", "time", "purpose"]) f["day" + (i + 1) + "_" + x] = "";
+    if (ev) { put("day" + (i + 1) + "_event", String(ev.title || "").slice(0, FIELD_META["day" + (i + 1) + "_event"].max)); if (ev.time) put("day" + (i + 1) + "_time", ev.time); } }
+  c.momo_filled = filled;
+}
 // ---- v812 one input, three outputs: her 4 picks -> the Content Planner draft + the team market PDF list ----------------------------------------------------
 async function marketOutputs(env, c) {
   if ((c.market.picked || []).length !== PICKS || c.market.momo_pending) return;
@@ -260,15 +296,15 @@ export function nextStep(c) {
 }
 export function cardOut(c) {
   if (c.stub) return { date: c.date, status: c.status, next_step: nextStep(c), creates_on: c.creates_on };
-  const ph = placeholders(c.form);
+  const ph = editionPlaceholders(c);   // v822 - every field of her edition, not only the ones in the form
   return { date: c.date, week_label: weekLabel(c.date), week_prefix: weekPrefix(c.date), week: { from: c.date, to: addDays(c.date, 6) }, status: c.status, next_step: nextStep(c), form: c.form, skip_slides: Array.isArray(c.form.skip_slides) ? c.form.skip_slides : [],
-    sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, done: sectionDone(c, s.id), state: (c.sections[s.id] || {}).state || "", keys: keysOf(s.id, c.form) })),
+    sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, done: sectionDone(c, s.id), state: (c.sections[s.id] || {}).state || "", keys: [...new Set(fieldsOf(s.id).concat(keysOf(s.id, c.form)))] })),
     unmapped_keys: Object.keys(c.form).filter((k) => k !== "skip_slides" && !sectionOfKey(k)),
     market: { topics: c.market.topics, picked: c.market.picked, why: c.market.why || {}, momo_pending: !!c.market.momo_pending, cp_code: c.cp_code || "" }, drafted_by_claude: Object.keys(c.drafted || {}),
     momo: c.momo || null, last_actions: c.last_actions || [], actions: c.actions || [],   // v812
     market_for_pdf: c.market.for_pdf ? c.market.picked.map((id) => c.market.topics.find((t) => t.id === id)).filter(Boolean) : [],   // v812 - her Claude builds the team market PDF from these
     placeholders: ph, build_requested: c.build_requested, build: c.build ? { at: c.build.at, placeholders: c.build.placeholders, has_pdf: !!c.build.pdf, has_pptx: !!c.build.pptx, slides: c.build.slides || 0 } : null,
-    approved: !!c.approved, hosts: HOSTS };
+    approved: !!c.approved, hosts: HOSTS, edition: editionOf(c), momo_filled: c.momo_filled || [] };   // v822 - the bridge hands her Claude the edition JSON
 }
 const logIt = (c, what) => { c.log = (c.log || []).concat({ at: new Date().toISOString(), what: String(what).slice(0, 60) }).slice(-60); };   // the action only, never a value
 
@@ -300,7 +336,11 @@ export async function cardAction(env, b, nowIso) {
     c.sections[sid] = { state: "same", at: now }; logIt(c, "same " + sid); formChanged(c);
   } else if (a === "edit") {
     const v = b.values && typeof b.values === "object" ? b.values : {};
-    for (const k of Object.keys(v)) { if (sectionOfKey(k) !== sid) continue; c.form[k] = clone(v[k]); delete c.drafted[k]; }
+    const long = Object.keys(v).filter((k) => FIELD_META[k] && FIELD_META[k].editable && String(Array.isArray(v[k]) ? v[k].join("\n") : v[k] == null ? "" : v[k]).length > FIELD_META[k].max);
+    if (long.length) return [400, { ok: false, error: "Too long for the slide: " + long.map((k) => k + " (max " + FIELD_META[k].max + ")").join(", ") + "." }];
+    if (sid === "tip") { const txt = Object.keys(v).map((k) => String(v[k] || "")).join(" "), who = WL_PEOPLE.map((p) => String(p[0]).replace(/\(.*?\)/g, "").trim().split(/\s+/)[0]).filter((n) => n.length > 2 && n !== "All");
+      const hit = who.find((n) => new RegExp("\\b" + n + "\\b", "i").test(txt)); if (hit) return [400, { ok: false, error: "The tip is for everyone: leave out names (" + hit + "). Frame it as support, never aimed at one person." }]; }   // v822 - TEMPLATE.md
+    for (const k of Object.keys(v)) { if (sectionOfKey(k) !== sid) continue; if (FIELD_META[k] && !FIELD_META[k].editable) continue; c.form[k] = clone(v[k]); delete c.drafted[k]; }
     if (JSON.stringify(c.form).length > MAX_FORM_BYTES) return [413, { ok: false, error: "That is too much text for one form." }];
     c.sections[sid] = { state: "edit", at: now }; logIt(c, "edit " + sid); formChanged(c);
   } else if (a === "skip") {
@@ -324,6 +364,7 @@ export async function cardAction(env, b, nowIso) {
   } else if (a === "bday_toggle") {   // v815 - untick a name; the log keeps only the action, never the name
     const L = c.momo && c.momo.celebrations && c.momo.celebrations.birthdays; const x = L && L.find((y) => y.key === String(b.key || ""));
     if (!x) return [404, { ok: false, error: "Not on this week's list." }]; x.on = b.on !== false; logIt(c, "birthday toggle");
+    c.form.cel_bday_body = asList(celebrationValues(c).cel_bday_body, c.form.cel_bday_body);   // v822
   } else if (a === "momo_edit") {   // v813 - her own wording for a section Momo drafted (or a section with no form fields yet): saved only when she taps Save
     if (sid === "market") return [400, { ok: false, error: "Change the market topics with the ticks." }];
     const lines = (Array.isArray(b.lines) ? b.lines : String(b.text || "").split("\n")).map((x) => String(x).replace(/\s+/g, " ").trim().slice(0, 300)).filter(Boolean).slice(0, 12);
@@ -415,7 +456,10 @@ export async function huddleBridge(env, method, name, b, nowMs) {
   if (m[2] === "form") {
     const f = b.form && typeof b.form === "object" && !Array.isArray(b.form) ? b.form : null, topics = b.market_topics;
     if (!f && topics == null) return [400, { ok: false, code: "empty", error: "Send form (an object of DNA keys) and/or market_topics." }];
-    if (f) { for (const k of Object.keys(f)) { if (k === "skip_slides") continue; c.form[k] = clone(f[k]); c.drafted[k] = true; } }
+    if (f) {
+      const long = Object.keys(f).filter((k) => FIELD_META[k] && FIELD_META[k].editable && String(Array.isArray(f[k]) ? f[k].join("\n") : f[k] == null ? "" : f[k]).length > FIELD_META[k].max);
+      if (long.length) return [400, { ok: false, code: "too_long", error: "Over the slide's maximum: " + long.map((k) => k + " (max " + FIELD_META[k].max + ")").join(", ") }];
+      for (const k of Object.keys(f)) { if (k === "skip_slides" || (FIELD_META[k] && !FIELD_META[k].editable)) continue; c.form[k] = clone(f[k]); c.drafted[k] = true; } }
     if (JSON.stringify(c.form).length > MAX_FORM_BYTES) return [413, { ok: false, code: "too_big", error: "The form is too large." }];
     if (topics != null) { c.market.topics = cleanTopics(topics); const ids = new Set(c.market.topics.map((t) => t.id)); c.market.picked = c.market.picked.filter((i) => ids.has(i)); momoMarket(c); }   // v812 - Momo ranks them and pre-ticks 4 unless she has chosen
     logIt(c, "bridge form"); if (f) formChanged(c); else recompute(c);
@@ -459,14 +503,15 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
   + '.mo{border:1px solid #C5A56A;border-radius:14px;background:#FBF6EA;padding:10px 12px;margin:8px 0}.mo label{display:block;font:600 .7rem "IBM Plex Mono",monospace;color:#8A6F3E;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}.mo p{margin:4px 0;font:500 .88rem "IBM Plex Sans",sans-serif}.mo .mn{color:#8A6F3E;font-size:.8rem}.tc small.why{color:#5F6B66;font-family:"IBM Plex Sans",sans-serif}.tc.on small.why{color:#E6F2EC}'
   + '.ag{display:grid;gap:8px;margin:8px 0}.ak{border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:10px 12px}.ak.ok{background:var(--gr);border-color:var(--gr);color:#fff}.ak b{display:block;font:600 .95rem "IBM Plex Sans",sans-serif}.mt{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.chip{border-radius:99px;padding:2px 9px;font:600 .7rem "IBM Plex Mono",monospace;background:#F3EFE7;color:#5F6B66}.chip.gold{background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A}.b3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}.b3 button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:10px;padding:8px 2px;font:600 .8rem "IBM Plex Sans",sans-serif}'
   + '.aa{display:grid;grid-template-columns:1fr 90px 64px;gap:6px;margin:10px 0}.aa input{border:1px solid #E3DDD1;border-radius:10px;padding:8px;font:500 .88rem "IBM Plex Sans",sans-serif;min-width:0;background:#fff}'
-  + '.pvw{aspect-ratio:16/9;background:#FAF7F1;border:1px solid #0A4F4A;border-radius:10px;padding:8px 10px;box-sizing:border-box;overflow:hidden;cursor:zoom-in;display:flex;flex-direction:column;font-size:9px}.pvw .pvh{display:flex;justify-content:space-between;font:600 1em "IBM Plex Mono",monospace;color:#8A6F3E}.pvw ul{margin:.6em 0 0;padding-left:1.4em;flex:1;font:600 1.3em/1.35 "IBM Plex Sans",sans-serif;color:#0A4F4A}.pvw li{margin:.2em 0}.pvw .phd{color:#C5A56A}.pvw .pvf{font:500 .8em "IBM Plex Sans",sans-serif;color:#8B918E}.pvw.big{font-size:13px;cursor:zoom-out;width:100%;aspect-ratio:auto;min-height:56vw;max-height:88vh;overflow:auto}'
+  + '</style><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600&display=swap"><style>.pvg{display:grid;grid-template-columns:1fr;gap:8px}.pvw .pvt{display:flex;justify-content:space-between;align-items:center}.pvw .pve{font:600 .9em Inter,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9A97A}.pvw .pvp{font:600 .75em Inter,sans-serif;color:#1F2B44;background:#C9A97A;border-radius:3px;padding:.1em .5em;letter-spacing:.08em}.pvw .pvn{font:400 2.1em/1.05 Anton,Impact,sans-serif;color:#1F2B44;margin:.25em 0 .2em;text-transform:uppercase}.pvw .pvs{font:400 .75em Inter,sans-serif;color:#626B7C}.sl{font:500 .66rem "IBM Plex Mono",monospace;color:#8B918E;margin-left:4px}.fv.ro{background:#F7F3EA}.cc{text-align:right;font:500 .7rem "IBM Plex Mono",monospace;color:#8B918E;margin-top:2px}.cc.full{color:#B4533C}.fxs{border:1px dashed #C5A56A;border-radius:12px;padding:8px 12px;margin:12px 0 0;font-size:.82rem;color:#5F6B66}.fxs p{margin:3px 0}.fxs b{color:#0A4F4A}</style><style>'
+  + '.pvw{aspect-ratio:16/9;background:#F9F1EF;border:1px solid #C9A97A;border-radius:10px;padding:8px 10px;box-sizing:border-box;overflow:hidden;cursor:zoom-in;display:flex;flex-direction:column;font-size:9px}.pvw .pvh{display:flex;justify-content:space-between;font:600 1em "IBM Plex Mono",monospace;color:#8A6F3E}.pvw ul{margin:.3em 0 0;padding-left:1.2em;flex:1;font:400 1.05em/1.35 Inter,sans-serif;color:#1F2B44;overflow:hidden}.pvw li{margin:.2em 0}.pvw .phd{color:#C5A56A}.pvw .pvf{font:400 .7em Inter,sans-serif;color:#626B7C;border-top:1px solid #C9A97A;padding-top:.3em}.pvw.big{font-size:13px;cursor:zoom-out;width:100%;aspect-ratio:auto;min-height:56vw;max-height:88vh;overflow:auto}'
   + '.pvo{position:fixed;inset:0;z-index:60;background:rgba(28,35,33,.6);display:flex;align-items:center;padding:12px;box-sizing:border-box}.pvi{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pvi img{width:100%;border-radius:8px;border:1px solid #E3DDD1}.bdt{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #EFE6D6;font-size:.9rem}.bdt small{color:#8A6F3E;margin-left:auto}.mo label.bdt{display:flex;text-transform:none;letter-spacing:0;font:500 .9rem "IBM Plex Sans",sans-serif;color:#1C2321;margin:0}.mo label.bdt small{font:500 .78rem "IBM Plex Mono",monospace}'
   + '.sw{display:flex;align-items:center;justify-content:space-between;border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:10px 12px;margin:10px 0;font:500 .86rem "IBM Plex Sans",sans-serif}</style>';
 
 export function cardPage(c, key) {
   const k = encodeURIComponent(key);
   if (!c || c.stub) return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE</div><h1>Huddle</h1><div class=hc><p class=hs>' + esc(c ? nextStep(c) : "No card yet.") + "</p></div>";
-  const D = { card: cardOut(c), prev: null, key, weeks: (c.weeks || []), sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS };
+  const D = { card: cardOut(c), prev: null, key, weeks: (c.weeks || []), sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS, meta: FIELD_META, slideFields: Object.fromEntries([...new Set(HUDDLE_FIELDS.map((r) => r[1]))].filter(Boolean).map((n) => [n, HUDDLE_FIELDS.filter((r) => r[1] === n).map((r) => r[0])])) };
   return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
     + '<div id=hud></div><div class=sheet id=sh><div class=in id=shi></div></div>'
     + '<script>var HD=' + jsonIn(D) + ';</script><script>' + CARD_JS + '</script>';
@@ -493,6 +538,7 @@ function draw(){
   h+='<button type=button class="sc'+(s.done?" done":s.id===firstUndone?" next":"")+'" data-s="'+s.id+'" id="sec_'+s.id+'"><b>'+e(lab)+'</b><small>Slides '+s.slides.join(", ")+'</small><span class=st>'+(s.done?'${IC.ok}':'${IC.todo}')+e(st)+'</span></button>'});
  h+='</div><div class=ph id=hph>${IC.warn}'+C.placeholders.count+' placeholder'+(C.placeholders.count===1?"":"s")+' left</div>';
  if(C.drafted_by_claude.length)h+='<div class=sw><span>'+C.drafted_by_claude.length+' field'+(C.drafted_by_claude.length===1?"":"s")+' drafted by Claude</span><button type=button class="btn alt" style="width:auto;margin:0;padding:6px 12px" id=hacc>Accept all</button></div>';
+ h+='<div class=fxs><b>Fixed slides</b><p>Slide 2 · Agenda: 8 segments'+((C.edition||{}).agenda_03?' · '+e(C.edition.agenda_03):'')+((C.edition||{}).agenda_04?' · '+e(C.edition.agenda_04):'')+'</p><p>Slide 13 · Q&amp;A and shout-outs</p><p class=sl>Locked in the template. Nothing to fill.</p></div>';   // v822
  if(C.status==="Ready to build"||C.status==="Built")h+='<button type=button class=btn id=hbuild>'+(C.build_requested?"Build asked for · waiting for your Claude":C.status==="Built"?"Build again":"Build preview")+'</button>';
  if(C.build&&C.build.has_pdf)h+='<a class="btn alt" id=hpdf href="/momo/work/huddle/file?date='+C.date+'&kind=pdf&'+location.search.slice(1)+'">Open the preview PDF</a>';
  if(C.status==="Built")h+='<button type=button class=btn id=happ>Approve</button>';
@@ -510,8 +556,8 @@ function draw(){
 }
 function closeSh(){$("sh").classList.remove("on")}
 $("sh").onclick=function(ev){if(ev.target===$("sh"))closeSh()};
-function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.id===id})[0]||{}).source||"";
- if(id==="market")return openMarket();
+function openSec(id,fields){var s=sec(id),src=(HD.sections.filter(function(x){return x.id===id})[0]||{}).source||"";
+ if(id==="market"&&!fields)return openMarket();
  var keys=s.keys.concat(Object.keys(P).filter(function(k){return ((HD.secOf||{})[k]===id)&&s.keys.indexOf(k)<0}));
  var skipped=(C.skip_slides||[]).length&&s.slides.every(function(n){return C.skip_slides.indexOf(n)>=0});
  var wh=(HD.sections.filter(function(x){return x.id===id})[0]||{}).where||"";var h='<h2>'+e(s.name)+'</h2><p class=hs>Shown on '+e(wh)+' (slide'+(s.slides.length>1?'s ':' ')+s.slides.join(" and ")+') · '+e(src)+'</p>';
@@ -519,7 +565,11 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  h+=preview(id,keys);   // v815 - see the slide while filling it
  if(id==="celebrations"&&md&&(md.birthdays||[]).length)h+='<div class=mo><label>Birthdays this week</label>'+md.birthdays.map(function(x){return '<label class=bdt><input type=checkbox data-bd="'+e(x.key)+'"'+(x.on?" checked":"")+'> <b>'+e(x.name)+'</b> <small>'+e(x.when)+'</small></label>'}).join("")+'<p class=mn><a href="/momo/work/huddle/birthdays'+location.search+'">Birthdays list</a></p></div>';
  if(!keys.length)h+='<p class=hs>No fields of this section are in the form yet.</p>';
- keys.forEach(function(k){var dr=C.drafted_by_claude.indexOf(k)>=0;h+='<div class=fv><label>'+e(k)+(dr?'<span class=dc>drafted by Claude</span>':'')+'</label><div class=lw>Last week: '+show(P[k])+'</div><textarea data-k="'+e(k)+'" style="display:none">'+e(typeof C.form[k]==="string"?C.form[k]:C.form[k]==null?"":JSON.stringify(C.form[k]))+'</textarea></div>'});
+ keys.forEach(function(k){var M=(HD.meta||{})[k]||{},dr=C.drafted_by_claude.indexOf(k)>=0,mf=(C.momo_filled||[]).indexOf(k)>=0,val=C.form[k],txt=Array.isArray(val)?val.join("\n"):(val==null?"":typeof val==="string"?val:JSON.stringify(val));
+  var tag=e(k)+(M.label?' <span class=sl>'+e(M.label)+'</span>':'')+(dr?'<span class=dc>drafted by Claude</span>':'')+(mf?'<span class=dc>filled by Momo</span>':'');
+  if(M.editable===false){h+='<div class="fv ro"><label>'+tag+' <span class=sl>fixed</span></label><div class=lw>'+show(val)+'</div></div>';return}
+  var multi=/notes|list/.test(M.type||"")||(M.max||0)>120;
+  h+='<div class=fv><label>'+tag+'</label><div class=lw>Last week: '+show(P[k])+'</div><textarea data-k="'+e(k)+'" data-arr="'+(Array.isArray(val)||Array.isArray(P[k])?1:0)+'" maxlength="'+(M.max||4000)+'" rows='+(/notes/.test(M.type||"")?7:multi?4:1)+' style="display:none">'+e(txt)+'</textarea><div class=cc data-c="'+e(k)+'" style="display:none">'+txt.length+' / '+(M.max||"")+'</div></div>'});
  h+='<div class=two id=bsr><button type=button class=btn id=bsame>Same as last week</button><button type=button class="btn alt" id=bedit>Edit</button></div>';
  var mdl=(md&&md.lines)?md.lines.join("\n"):"";
  h+='<div id=bedw style="display:none"><p class=hs>'+(keys.length?'Change the text above, then tap Save.':'Write what goes on '+e(wh)+', one line per point, then tap Save.')+'</p>'+(keys.length?'':'<textarea id=bmed style="width:100%;box-sizing:border-box;min-height:120px;border:1px solid #E3DDD1;border-radius:10px;padding:8px;font:500 .9rem IBM Plex Sans,sans-serif;background:#FFFDF9">'+e(mdl)+'</textarea>')+'<div class=two><button type=button class=btn id=bsave>Save</button><button type=button class="btn alt" id=bcancel>Cancel</button></div></div>';
@@ -530,19 +580,22 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
  if($("bmomo"))$("bmomo").onclick=function(){api({action:"accept_momo",section:id},closeSh)};
  $("bsame").onclick=function(){api({action:"same",section:id},closeSh)};
- $("bedit").onclick=function(){$("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.style.display="block"});$("bsr").style.display="none";$("bedw").style.display="block";var f=$("shi").querySelector("textarea[data-k]")||$("bmed");if(f)f.focus()};   // v813 - Edit opens the text; only Save saves
+ $("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.oninput=function(){var c=$("shi").querySelector('[data-c="'+t.getAttribute("data-k")+'"]');if(c){c.textContent=t.value.length+" / "+t.getAttribute("maxlength");c.className="cc"+(t.value.length>=+t.getAttribute("maxlength")?" full":"")}}});
+ $("bedit").onclick=function(){$("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.style.display="block"});$("shi").querySelectorAll(".cc").forEach(function(c){c.style.display="block"});$("bsr").style.display="none";$("bedw").style.display="block";var f=$("shi").querySelector("textarea[data-k]")||$("bmed");if(f)f.focus()};   // v813 - Edit opens the text; only Save saves
  $("bcancel").onclick=function(){openSec(id)};
- $("bsave").onclick=function(){var tas=$("shi").querySelectorAll("textarea[data-k]");if(tas.length){var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)}else{var tx=$("bmed").value;if(!tx.trim()){$("bmed").focus();return}api({action:"momo_edit",section:id,text:tx},closeSh)}};
+ $("bsave").onclick=function(){var tas=$("shi").querySelectorAll("textarea[data-k]");if(tas.length){var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(t.getAttribute("data-arr")==="1"){x=x.split("\n").map(function(y){return y.trim()}).filter(Boolean)}else if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)}else{var tx=$("bmed").value;if(!tx.trim()){$("bmed").focus();return}api({action:"momo_edit",section:id,text:tx},closeSh)}};
  $("bskip").onchange=function(){api({action:"skip",section:id,on:this.checked},closeSh)};
  if($("breo"))$("breo").onclick=function(){api({action:"reopen",section:id},closeSh)};
 }
-function preview(id,keys){var s=sec(id),segs=(HD.segs||[]).filter(function(g){return g.slides.some(function(n){return s.slides.indexOf(n)>=0})}),g=segs[0]||{n:"",name:s.name,min:0};
- var md=(C.momo||{})[id],lines=[];
- if(id==="market")lines=C.market.picked.map(function(t){var x=C.market.topics.filter(function(y){return y.id===t})[0];return x?x.line:""});
- else{keys.forEach(function(k){if(/_notes$/i.test(k))return;var v=C.form[k];if(v==null||v==="")lines.push("[placeholder]");else lines.push(typeof v==="string"?v:JSON.stringify(v))});if(!lines.length&&md&&md.lines)lines=md.lines.slice()}
- if(id==="celebrations"&&md&&md.birthdays)md.birthdays.forEach(function(x){if(x.on)lines.push("Happy birthday, "+x.name+" ("+x.when+")")});
- var body=lines.slice(0,6).map(function(l){return '<li'+(l==="[placeholder]"?' class=phd':'')+'>'+e(l)+'</li>'}).join("")||'<li class=phd>[placeholder]</li>';
- var h='<p class=hs style="margin:6px 0 4px">How it will show (tap to enlarge)</p><div class=pvw><div class=pvh><span>'+e(g.n)+' '+e(g.name)+'</span><span>'+e((HD.hosts||[]).join(" · "))+'</span></div><ul>'+body+'</ul><div class=pvf>'+e(C.week_label)+' · presenter view · the slide design comes from the DNA</div></div>';
+function preview(id,keys){var s=sec(id),md=(C.momo||{})[id],ed=C.edition||{},SF=HD.slideFields||{},M=HD.meta||{};   // v822 - FN palette: navy #1F2B44, gold #C9A97A, blush #F9F1EF, Anton + Inter
+ var val=function(k){var v=ed[k];if(Array.isArray(v))return v.join(" · ");return v==null?"":String(v)};
+ var ph=function(t){return t?e(t):'<span class=phd>[placeholder]</span>'};
+ var thumbs=s.slides.map(function(n){var fs=(SF[n]||[]).filter(function(k){return !/_notes$/.test(k)}),lab=fs.length&&M[fs[0]]?M[fs[0]].label:("Slide "+n);
+  var head=fs.filter(function(k){return /headline|title_line1|_title$|^mantra$/.test(k)})[0]||fs[0],eye=fs.filter(function(k){return /eyebrow|_theme$/.test(k)})[0];
+  var rest=fs.filter(function(k){return k!==head&&k!==eye&&!/_bg$|_url$|_source$/.test(k)}).slice(0,6);
+  var src=fs.filter(function(k){return /_source$/.test(k)})[0];
+  return '<div class=pvw data-n='+n+'><div class=pvt><span class=pve>'+(eye?ph(val(eye)):e(lab))+'</span><span class=pvp>PREVIEW</span></div><div class=pvn>'+ph(val(head))+'</div><ul>'+rest.map(function(k){return '<li>'+ph(val(k))+'</li>'}).join("")+'</ul>'+(src?'<div class=pvs>'+ph(val(src))+'</div>':'')+'<div class=pvf>CONFIDENTIAL · FN Realty internal use only · '+e(C.week_label)+' · slide '+n+'</div></div>'});
+ var h='<p class=hs style="margin:6px 0 4px">Preview of the slide'+(s.slides.length>1?'s':'')+' (tap to enlarge)</p><div class=pvg>'+thumbs.join("")+'</div>';
  if(C.build&&C.build.slides)h+='<p class=hs style="margin:8px 0 4px">Last built slide'+(s.slides.length>1?'s':'')+'</p><div class=pvi>'+s.slides.filter(function(n){return n<=C.build.slides}).map(function(n){return '<img alt="Slide '+n+'" src="/momo/work/huddle/file?date='+C.date+'&kind=slide&n='+n+'&'+location.search.slice(1)+'">'}).join("")+'</div>';
  return h}
 function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
@@ -550,12 +603,14 @@ function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
   if(C.market.momo_pending)h+='<div class=mo><label>Momo ranked the topics and pre-ticked 4</label><p>Change any tick, or accept them as they are.</p><button type=button class=btn id=macc>Accept Momo\'s 4</button></div>';
   if(C.market.cp_code||C.market_for_pdf.length)h+='<div class=mo><label>Also done with these 4</label>'+(C.market.cp_code?'<p>Draft market post in your Content Planner ('+e(C.market.cp_code)+'), not published</p>':'')+(C.market_for_pdf.length?'<p>Marked for the team market PDF</p>':'')+'</div>';
   h+=preview("market",[]);
+  h+='<button type=button class="btn alt" id=mfields>Market slide text (slides 4-7)</button>';
   if(!T.length)h+='<p class=hs>No topics yet. Your Claude adds 15 to 20 from Najma before the build.</p>';
   h+='<div class=tp>';T.forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small>'+(on&&W[t.id]?'<small class=why>Why: '+e(W[t.id])+'</small>':'')+'</span></div>'});
   h+='</div><button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
   $("shi").querySelectorAll(".tc").forEach(function(d){d.onclick=function(){var id=d.getAttribute("data-t"),i=pick.indexOf(id);if(i>=0)pick.splice(i,1);else if(pick.length<4)pick.push(id);body()}});
   $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)};
   $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
+  if($("mfields"))$("mfields").onclick=function(){openSec("market",true)};
   if($("macc"))$("macc").onclick=function(){api({action:"accept_momo",section:"market"},closeSh)}}
  body();$("sh").classList.add("on")}
 window.hudOpen=openSec;draw();
