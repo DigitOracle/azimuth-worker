@@ -14,7 +14,7 @@ const html = Hd.cardPageWithPrev(await Hd.getCard(env, "2026-11-30"), prev, "k")
 const js = html.slice(html.indexOf("(function(){"));
 const editH = /\$\("bedit"\)\.onclick=function\(\)\{([^]*?)\};/.exec(js);
 ok(editH && !/api\(/.test(editH[1]) && /bedw/.test(editH[1]), "Edit opens the editor and never calls the server");
-ok(/id=bsave>Save</.test(js) && /id=bcancel>Cancel</.test(js) && /\$\("bcancel"\)\.onclick=function\(\)\{openSec\(id\)\}/.test(js), "Save and Cancel are there; Cancel changes nothing");
+ok(/id=bsave>Save</.test(js) && /id=bcancel>Cancel</.test(js) && /\$\("bcancel"\)\.onclick=function\(\)\{openFields\(id,true\)\}/.test(js), "Save and Cancel are there; Cancel changes nothing");
 ok(/action:"momo_edit"/.test(js) && /action:"edit",section:id,values:v/.test(js), "Save writes her text: form fields when the section has them, else her own lines");
 new Function(js.replace(/<\/script>[\s\S]*$/, "")); ok(true, "the card script parses");
 

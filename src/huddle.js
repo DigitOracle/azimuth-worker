@@ -28,6 +28,9 @@ import { draftTasksFrom } from "./draft_tasks.js";
 import { withRoster, rosterMatch } from "./work_log.js";   // v815 - organogram first names for the birthdays
 import { readBirthdays, birthdaysFor, birthdayAction, birthdaysPage } from "./huddle_birthdays.js";   // v815
 import { MOMO_TOAST_JS } from "./momo_toast.js";
+import { ytRead } from "./yt_read.js";   // v823 - the Theme & clip card reads the YouTube clip
+import { draftTheme, draftPaste, THEME_KEYS } from "./huddle_draft.js";
+import { projectFrom, mortgageFrom, salesFrom, deptsFrom, weekFrom, tipValues, shoutsFrom, SHOUT_TITLE, PROJECT_FIELDS, MORTGAGE_FIELDS, firstName as fnOf } from "./huddle_project.js";   // v823 - her slide-by-slide brief
 
 export const HUD = "hud_card_", HUD_IDX = "hud_index", HUD_FILE = "hud_file_";
 export const STATUSES = ["Draft", "Filling", "Ready to build", "Built", "Approved", "Presented", "Closed"];
@@ -47,16 +50,20 @@ export const fieldsOf = (sid) => HUDDLE_FIELDS.filter((r) => r[3] === sid).map((
 export const SECTIONS = [
   { id: "theme", name: "Theme & clip", slides: [1, 3], prefixes: ["theme", "clip", "motivation", "video", "youtube"], source: "Najjuko (Ali sometimes suggests the clip)" },
   { id: "market", name: "Market", slides: [4, 5, 6, 7], prefixes: ["market"], source: "Najma (read-only) + public sources" },
-  { id: "recognition", name: "Recognition", slides: [8], prefixes: ["recognition", "recog", "top_performer", "award"], source: "Sales director" },
-  { id: "announcements", name: "Announcements", slides: [9], prefixes: ["announcement", "announce", "update", "hr_"], source: "Management / HR" },
-  { id: "celebrations", name: "Celebrations", slides: [10], prefixes: ["celebration", "celebrate", "birthday", "bday", "days_to_mark", "holiday"], source: "HR + UAE calendar" },
-  { id: "tip", name: "Tip of the week", slides: [11], prefixes: ["tip"], source: "Najjuko or Ali" },
+  { id: "project", name: "Project of the week", slides: [], prefixes: ["project_"], source: "Managing director's choice; developer's own material" },
+  { id: "mortgage", name: "Mortgage & partners", slides: [], prefixes: ["mort_"], source: "Bank / partner updates" },
+  { id: "recognition", name: "Celebrating every sale", slides: [8], prefixes: ["recognition", "recog", "top_performer", "award"], source: "Sales director" },
+  { id: "announcements", name: "Company updates", slides: [9], prefixes: ["announcement", "announce", "update", "hr_"], source: "Management / HR" },
+  { id: "celebrations", name: "Celebrating our people and our moments", slides: [10], prefixes: ["celebration", "celebrate", "birthday", "bday", "days_to_mark", "holiday"], source: "HR + UAE calendar" },
+  { id: "tip", name: "FN Success Tips", slides: [11], prefixes: ["tip"], source: "Najjuko or Ali" },
   { id: "schedule", name: "Schedule", slides: [12], prefixes: ["schedule", "week_", "day_", "focus"], source: "Weekly schedule" },
+  { id: "shoutouts", name: "Shout-outs", slides: [], prefixes: ["s13_"], source: "Anyone, to a person or a department" },
   { id: "mantra", name: "Mantra & close", slides: [14, 15], prefixes: ["mantra", "challenge", "close", "closing"], source: "Team mantra (fixed)" },
 ];
 // v813 (Najjuko's walkthrough 8 Nov: "slide one and slide three" meant nothing to her) - each section says in plain words where it shows in the deck
 export const WHERE = { theme: "the opening slide and the theme slide", market: "the four market slides", recognition: "the recognition slide", announcements: "the announcements slide",
-  celebrations: "the celebrations slide", tip: "the tip-of-the-week slide", schedule: "the week-ahead slide", mantra: "the mantra and closing slides" };
+  celebrations: "the celebrations slide", tip: "the tip-of-the-week slide", schedule: "the week-ahead slide", mantra: "the mantra and closing slides",
+  project: "the project-of-the-week slide (new)", mortgage: "the mortgage and partners slide (new)", shoutouts: "the shout-outs slide" };
 export const FIXED_SLIDES = [2, 13];   // agenda and Q&A: locked, nothing to fill
 // the run of show (about 30 minutes)
 export const SEGMENTS = [
@@ -153,6 +160,7 @@ export async function createCard(env, date, nowIso, deps) {
     market: { topics: [], picked: [], why: {}, momo_pending: false, by: "" }, build: null, build_requested: null, approved: null, presenter: { done: {}, notes: {} }, record_id: "", log: [],
     // v812 - last week's open actions, reviewed first in presenter mode; this week's actions (carried ones join automatically)
     last_actions: prev ? (prev.actions || []).filter((x) => x.status !== "done").map((x) => Object.assign({}, x, { review: "" })) : [], actions: [] };
+  c.sections.mantra = { state: "same", at: c.created }; c.sections.shoutouts = { state: "same", at: c.created };   // mantra carried forward; no shout-outs = the standing prompt slide   // v823 - fixed slides need nothing from her each week
   try { await prefill(env, c, prev, deps || {}); } catch (e) { c.momo = c.momo || { notes: ["Momo could not prepare the drafts this time."] }; }
   await putCard(env, c); return c;
 }
@@ -206,9 +214,11 @@ async function prefill(env, c, prev, deps) {
   const top = Object.entries(ppl).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 3).map((x) => x[0]);
   if (top.length) rec.push("Worked with most: " + top.join(", ") + ".");
   M.recognition = rec.length ? { lines: rec, accepted: false } : null;
+  c.sales_suggest = []; for (const e of es) { const bt = Array.isArray(e.broker_tasks) ? e.broker_tasks : []; if (!bt.some((x) => DEAL_IDS.has(x))) continue; for (const pp of (e.people || []).filter((x) => known.has(x))) { const line = ((/\(([^)]+)\)/.exec(pp) || [])[1] || fnOf(pp)) + ", " + (/rent|lease|tenan/i.test(e.title || "") ? "Rental" : /off[- ]?plan/i.test(e.title || "") ? "Off-plan" : "Sale") + ", " + String(e.title || "").slice(0, 40); if (!c.sales_suggest.includes(line)) c.sales_suggest.push(line); } }
+  c.sales_suggest = c.sales_suggest.slice(0, 12);
   if (!rec.length) M.notes.push("No work-log entries last week, so no recognition draft.");
   // celebrations: only the UAE days of the week (birthdays are HR data: she pastes them)
-  const end = addDays(c.date, 6), days = PLAN_SEED.filter((s) => s[1] <= end && s[2] >= c.date && (Date.parse(s[2]) - Date.parse(s[1])) / 864e5 <= 3).map((s) => s[3] + " (" + niceDate(s[1] < c.date ? c.date : s[1]) + ")");
+  const end = addDays(c.date, 6), days = PLAN_SEED.filter((s) => s[1] <= end && s[2] >= c.date && ((Date.parse(s[2]) - Date.parse(s[1])) / 864e5 <= 3 || /awareness|month|day/i.test(s[3]))).map((s) => s[3] + " (" + niceDate(s[1] < c.date ? c.date : s[1]) + ")");
   let bd = []; try { const people = (await withRoster(env, { people: WL_PEOPLE })).people; bd = birthdaysFor(await readBirthdays(env), c.date, prev ? prev.date : "", people, rosterMatch); } catch (e) {}
   M.celebrations = days.length || bd.length ? { lines: days, birthdays: bd, accepted: bd.length > 0, note: bd.length ? "Birthdays from your Birthdays list; untick anyone to leave them out." : "No birthdays this week on your Birthdays list." } : null;   // v815 - pre-accepted
   if (bd.length) c.sections.celebrations = { state: "momo", at: new Date().toISOString() };
@@ -245,6 +255,8 @@ export function celebrationValues(c) {
 }
 function fillFromMomo(c, prev, cal) {
   const f = c.form, filled = [], put = (k, v) => { f[k] = v; filled.push(k); };
+  put("cel_headline", "Celebrating Our People and Our Moments".slice(0, FIELD_META.cel_headline.max)); put("cel_bday_title", "Celebrating our people".slice(0, FIELD_META.cel_bday_title.max)); put("cel_days_title", "Days we are marking".slice(0, FIELD_META.cel_days_title.max));
+  c.tip_i = Math.floor(Date.parse(c.date) / (7 * 864e5)); for (const [k, v] of Object.entries(tipValues(c.tip_i, FIELD_META, prev && prev.form))) put(k, v); c.drafts = c.drafts || {}; c.drafts.tip = { lib: true, at: c.created, keys: Object.keys(tipValues(0, FIELD_META)) };
   const cv = celebrationValues(c); put("cel_bday_body", asList(cv.cel_bday_body, prev && prev.form.cel_bday_body)); put("cel_days_body", asList(cv.cel_days_body, prev && prev.form.cel_days_body));
   put("week_range", weekRange(c.date));
   const DN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -289,8 +301,9 @@ function formChanged(c) {
 export function nextStep(c) {
   if (c.stub) return "The card appears on Thursday " + niceDate(c.creates_on || c.date);
   if (c.status === "Draft" || c.status === "Filling") {
-    const s = SECTIONS.find((x) => !sectionDone(c, x.id));
-    return s.id === "market" ? "pick " + PICKS + " market topics" : "fill " + s.name;
+    const s = WEEKLY.map((x) => SEC[x]).find((x) => !sectionDone(c, x.id)) || SECTIONS.find((x) => !sectionDone(c, x.id));
+    const st = sectionStatus(c, s.id);
+    return s.id === "theme" && st === "Needs link" ? "paste this week's YouTube link" : s.id === "market" ? "tick " + PICKS + " market topics" : st === "Ready to check" ? "check " + s.name : "add " + s.name;
   }
   return { "Ready to build": "build the preview", "Built": "check the preview and approve", "Approved": "present on Monday", "Presented": "close the huddle", "Closed": "done" }[c.status] || "";
 }
@@ -304,7 +317,11 @@ export function cardOut(c) {
     momo: c.momo || null, last_actions: c.last_actions || [], actions: c.actions || [],   // v812
     market_for_pdf: c.market.for_pdf ? c.market.picked.map((id) => c.market.topics.find((t) => t.id === id)).filter(Boolean) : [],   // v812 - her Claude builds the team market PDF from these
     placeholders: ph, build_requested: c.build_requested, build: c.build ? { at: c.build.at, placeholders: c.build.placeholders, has_pdf: !!c.build.pdf, has_pptx: !!c.build.pptx, slides: c.build.slides || 0 } : null,
-    approved: !!c.approved, hosts: HOSTS, edition: editionOf(c), momo_filled: c.momo_filled || [] };   // v822 - the bridge hands her Claude the edition JSON
+    approved: !!c.approved, hosts: HOSTS, edition: editionOf(c), momo_filled: c.momo_filled || [],
+    extra_slides: { note: "Not in render_edition.py yet: two new layouts (project of the week, mortgage) and slide 13 retitled SHOUT-OUTS need her DNA template update.",
+      project_of_week: Object.fromEntries(PROJECT_FIELDS.map((f) => [f[0], c.form[f[0]] || ""])), project_sources: c.project_sources || {}, mortgage: Object.fromEntries(MORTGAGE_FIELDS.map((f) => [f[0], c.form[f[0]] || ""])),
+      shoutouts: { s13_title: SHOUT_TITLE, items: c.shoutouts || [] } }, slide_order: SLIDE_ORDER, sales_suggest: c.sales_suggest || [], shoutouts: c.shoutouts || [],
+    section_status: Object.fromEntries(SECTIONS.map((s) => [s.id, sectionStatus(c, s.id)])), ready_count: WEEKLY.filter((x) => sectionStatus(c, x) === "Done ✓").length, drafts: c.drafts || {} };   // v823   // v822 - the bridge hands her Claude the edition JSON
 }
 const logIt = (c, what) => { c.log = (c.log || []).concat({ at: new Date().toISOString(), what: String(what).slice(0, 60) }).slice(-60); };   // the action only, never a value
 
@@ -323,14 +340,74 @@ export function cleanTopics(list) {
 }
 
 // ---- her actions on the card (her key only; the page answers them) ------------------------------------------------------------------------------------
-export async function cardAction(env, b, nowIso) {
+// v823 (Kendall + Najjuko walkthrough: "dumb down this interface") - ONE input per weekly card; Momo drafts the fields; she checks the slide and taps Accept.
+// v823 - her deck, in order (Najjuko's slide-by-slide brief + huddle-template.md): deck position, label, card section, template slide
+// (matches Momo_Huddle_Mockup_v823.html: 9 Company updates, 10 Mortgage (new), 11 Celebrating every sale (new, rec_* fields))
+export const SLIDE_ORDER = [[1, "Cover", "theme", 1], [2, "Agenda", "", 2], [3, "Clip & pillars", "theme", 3], ["4-7", "Market", "market", "4-7"], [8, "Project of the week", "project", "new"], [9, "Company updates", "announcements", 9],
+  [10, "Mortgage", "mortgage", "new"], [11, "Celebrating every sale", "recognition", "new (rec_* fields, template slide 8)"], [12, "Celebrating people & moments", "celebrations", 10], [13, "Success tips", "tip", 11], [14, "Schedule Mon–Sat", "schedule", 12],
+  [15, "Shout-outs", "shoutouts", 13], [16, "Mantra", "mantra", 14], [17, "Close", "mantra", 15]];
+export const WEEKLY = ["theme", "market", "project", "mortgage", "recognition", "announcements", "celebrations", "tip", "schedule"];
+export const DESC = { theme: "This week's theme and video. Paste the YouTube link Ali sent; Momo writes the two slides.", market: "Four market topics for slides 4 to 7. Tick 4.",
+  celebrations: "Birthdays and UAE days this week. Filled by Momo: check and accept.", schedule: "The week ahead, from your calendar. Filled by Momo: check and accept.",
+  recognition: "Everyone who closed this week: off-plan, rental, secondary.", announcements: "Marketing, BD, PR, HR and other departments. Paste them all; Momo sorts them.", tip: "One tip a week for the whole team: the tip, what it means, why it works.",
+  mantra: "The team mantra and the closing slide. Fixed; open Edit details to change the closing line.",
+  project: "The managing director's project of the week. Only figures from the developer's own material, each with its source.", mortgage: "Payment plans, mortgage options and the banks and partners FN works with.",
+  shoutouts: "Shout-outs to a person or a department. Leave empty to show the standing slide." };
+const PASTE = ["recognition", "announcements", "tip", "project", "mortgage", "schedule", "shoutouts"];
+export function sectionStatus(c, sid) {
+  if (sid === "market") return sectionDone(c, "market") ? "Done ✓" : c.market.momo_pending ? "Ready to check" : "Tick 4";
+  if (sectionDone(c, sid)) return "Done ✓";
+  if ((c.drafts || {})[sid]) return "Ready to check";
+  if (sid === "theme") return "Needs link";
+  if (sid === "celebrations" || sid === "schedule" || sid === "tip") return "Ready to check";
+  return PASTE.includes(sid) ? "Needs update" : "Needs input";
+}
+export async function cardAction(env, b, nowIso, deps) {
   const c = await getCard(env, b.date); if (!c) return [404, { ok: false, error: "There is no huddle card for that date." }];
   const now = nowIso || new Date().toISOString(), a = String(b.action || ""), sid = String(b.section || "");
   const locked = ["Presented", "Closed"].includes(c.status);
-  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo", "momo_edit", "bday_toggle"];
+  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo", "momo_edit", "bday_toggle", "theme_link", "paste", "redo", "accept_section"];
   if (locked && formActs.includes(a)) return [409, { ok: false, error: "This huddle has been presented; the form is closed." }];
   if (formActs.includes(a) && a !== "pick" && a !== "accept" && !SEC[sid]) return [400, { ok: false, error: "Which section?" }];
-  if (a === "same") {
+  if (a === "theme_link" || (a === "redo" && sid === "theme")) {   // v823 - the one question on Theme & clip
+    const url = a === "redo" ? String(((c.drafts || {}).theme || {}).url || c.form.clip_url || "") : String(b.url || "").trim();
+    const yt = await ytRead(env, url, deps && deps.fetch); if (yt.error) return [400, { ok: false, error: yt.error }];
+    const d = await draftTheme(env, deps || {}, yt, FIELD_META, a === "redo");
+    for (const k of Object.keys(d.values)) { if (FIELD_META[k] && FIELD_META[k].editable) c.form[k] = d.values[k]; }
+    c.drafts = c.drafts || {}; c.drafts.theme = { url: yt.url, title: yt.title, captions: yt.captions_ok, by: d.by, at: now, keys: Object.keys(d.values) };
+    delete c.sections.theme; logIt(c, a === "redo" ? "theme redo" : "theme link"); formChanged(c);
+  } else if (a === "paste" || (a === "redo" && PASTE.includes(sid))) {   // v823 - one pasted update -> the section's fields
+    if (!PASTE.includes(sid)) return [400, { ok: false, error: "Which card?" }];
+    if (a === "redo" && sid === "tip" && !(((c.drafts || {}).tip || {}).text)) {   // another tip from the rotation
+      c.tip_i = (c.tip_i || 0) + 1; const tv = tipValues(c.tip_i, FIELD_META, c.form); Object.assign(c.form, tv); c.drafts = c.drafts || {}; c.drafts.tip = { lib: true, at: now, keys: Object.keys(tv) }; delete c.sections.tip; logIt(c, "tip redo"); formChanged(c);
+      await putCard(env, c); return [200, { ok: true, card: cardOut(c) }];
+    }
+    const text = a === "redo" ? String(((c.drafts || {})[sid] || {}).text || "") : String(b.text || "").trim();
+    if (text.length < 3 && sid !== "shoutouts") return [400, { ok: false, error: "Paste the update first." }];
+    const today = dubaiToday(), PRE = { project: () => projectFrom(text, today), mortgage: () => mortgageFrom(text, Object.fromEntries(PROJECT_FIELDS.map((f) => [f[0], c.form[f[0]] || ""])), today),
+      recognition: () => salesFrom(text, FIELD_META), announcements: () => deptsFrom(text, c.form, FIELD_META), shoutouts: () => ({ values: {}, shouts: shoutsFrom(text) }),
+      schedule: async () => { let radar = []; try { const R = deps && deps.kv ? await deps.kv(env, "launch_radar") : null; radar = ((R && R.events) || []).filter((x) => x.date).map((x) => ({ date: x.date, title: x.project || x.title || x.developer || "Launch" })); } catch (e) {} return weekFrom(text, c.date, FIELD_META, radar); } };
+    if (PRE[sid]) {
+      const r = await PRE[sid](); if (r.error) return [400, { ok: false, error: r.error }];
+      const vals = Object.assign({}, r.values); delete vals.sources; for (const k of Object.keys(vals)) c.form[k] = vals[k];
+      if (sid === "project") c.project_sources = r.values.sources || {}; if (sid === "shoutouts") c.shoutouts = r.shouts;
+      c.drafts = c.drafts || {}; c.drafts[sid] = { text: text.slice(0, 6000), by: "plain", at: now, keys: Object.keys(vals), overflow: r.overflow || 0 };
+      delete c.sections[sid]; logIt(c, "paste " + sid); formChanged(c);
+      await putCard(env, c); return [200, { ok: true, card: cardOut(c) }];
+    }
+    if (sid === "tip") { const who = WL_PEOPLE.map((x) => String(x[0]).replace(/\(.*?\)/g, "").trim().split(/\s+/)[0]).filter((x) => x.length > 2 && x !== "All"), hit = who.find((x) => new RegExp("\\b" + x + "\\b", "i").test(text));
+      if (hit) return [400, { ok: false, error: "The tip is for everyone: leave out names (" + hit + ")." }]; }
+    const prevC = c.prev_date ? await getCard(env, c.prev_date) : null;
+    const d = await draftPaste(env, deps || {}, sid, text.slice(0, 6000), fieldsOf(sid), FIELD_META, prevC ? prevC.form : null);
+    for (const k of Object.keys(d.values)) c.form[k] = d.values[k];
+    c.drafts = c.drafts || {}; c.drafts[sid] = { text: text.slice(0, 6000), by: d.by, at: now, keys: Object.keys(d.values) };
+    delete c.sections[sid]; logIt(c, "paste " + sid); formChanged(c);
+  } else if (a === "accept_section") {   // v823 - she checked the slide: Done
+    if (!SEC[sid]) return [400, { ok: false, error: "Which card?" }];
+    if (sid === "market") { c.market.momo_pending = false; c.market.by = "her"; await marketOutputs(env, c); }
+    else { const d = (c.drafts || {})[sid]; for (const k of (d && d.keys) || fieldsOf(sid)) delete c.drafted[k]; if (c.momo && c.momo[sid]) c.momo[sid].accepted = true; }
+    c.sections[sid] = { state: "momo", at: now }; if (c.drafts) delete c.drafts[sid]; logIt(c, "accept " + sid); formChanged(c);
+  } else if (a === "same") {
     const prev = c.prev_date ? await getCard(env, c.prev_date) : null, pf = (prev && prev.form) || {};
     for (const k of keysOf(sid, pf)) { if (!DATE_FIELDS.includes(k)) c.form[k] = clone(pf[k]); delete c.drafted[k]; }
     c.sections[sid] = { state: "same", at: now }; logIt(c, "same " + sid); formChanged(c);
@@ -506,13 +583,18 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
   + '</style><link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600&display=swap"><style>.pvg{display:grid;grid-template-columns:1fr;gap:8px}.pvw .pvt{display:flex;justify-content:space-between;align-items:center}.pvw .pve{font:600 .9em Inter,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#C9A97A}.pvw .pvp{font:600 .75em Inter,sans-serif;color:#1F2B44;background:#C9A97A;border-radius:3px;padding:.1em .5em;letter-spacing:.08em}.pvw .pvn{font:400 2.1em/1.05 Anton,Impact,sans-serif;color:#1F2B44;margin:.25em 0 .2em;text-transform:uppercase}.pvw .pvs{font:400 .75em Inter,sans-serif;color:#626B7C}.sl{font:500 .66rem "IBM Plex Mono",monospace;color:#8B918E;margin-left:4px}.fv.ro{background:#F7F3EA}.cc{text-align:right;font:500 .7rem "IBM Plex Mono",monospace;color:#8B918E;margin-top:2px}.cc.full{color:#B4533C}.fxs{border:1px dashed #C5A56A;border-radius:12px;padding:8px 12px;margin:12px 0 0;font-size:.82rem;color:#5F6B66}.fxs p{margin:3px 0}.fxs b{color:#0A4F4A}</style><style>'
   + '.pvw{aspect-ratio:16/9;background:#F9F1EF;border:1px solid #C9A97A;border-radius:10px;padding:8px 10px;box-sizing:border-box;overflow:hidden;cursor:zoom-in;display:flex;flex-direction:column;font-size:9px}.pvw .pvh{display:flex;justify-content:space-between;font:600 1em "IBM Plex Mono",monospace;color:#8A6F3E}.pvw ul{margin:.3em 0 0;padding-left:1.2em;flex:1;font:400 1.05em/1.35 Inter,sans-serif;color:#1F2B44;overflow:hidden}.pvw li{margin:.2em 0}.pvw .phd{color:#C5A56A}.pvw .pvf{font:400 .7em Inter,sans-serif;color:#626B7C;border-top:1px solid #C9A97A;padding-top:.3em}.pvw.big{font-size:13px;cursor:zoom-out;width:100%;aspect-ratio:auto;min-height:56vw;max-height:88vh;overflow:auto}'
   + '.pvo{position:fixed;inset:0;z-index:60;background:rgba(28,35,33,.6);display:flex;align-items:center;padding:12px;box-sizing:border-box}.pvi{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pvi img{width:100%;border-radius:8px;border:1px solid #E3DDD1}.bdt{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #EFE6D6;font-size:.9rem}.bdt small{color:#8A6F3E;margin-left:auto}.mo label.bdt{display:flex;text-transform:none;letter-spacing:0;font:500 .9rem "IBM Plex Sans",sans-serif;color:#1C2321;margin:0}.mo label.bdt small{font:500 .78rem "IBM Plex Mono",monospace}'
+  + '.nav3{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px}.nav3 a,.nav3 .bk2{color:#0A4F4A;font:600 .92rem "IBM Plex Sans",sans-serif;text-decoration:none;background:none;border:0;padding:6px 0;cursor:pointer}'
+  + '.sl2{display:flex;flex-direction:column;gap:8px}.sc2{display:flex;align-items:center;gap:10px;border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:12px;text-align:left;font:inherit;color:inherit;cursor:pointer}.sc2 .t2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.sc2 b{font-size:.95rem}.sc2 small{font-size:.76rem;color:#5F6B66;line-height:1.3}'
+  + '.sc2 .bdg{flex:0 0 auto;border-radius:99px;padding:4px 10px;font:600 .72rem "IBM Plex Sans",sans-serif;background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A;white-space:nowrap}.sc2.chk .bdg{background:#fff;color:#0A4F4A;border-color:#0A4F4A}.sc2.done{background:var(--gr);border-color:var(--gr);color:#fff}.sc2.done small{color:#E6F2EC}.sc2.done .bdg{background:#fff;color:var(--gr);border-color:#fff}'
+  + '.q1{display:block;font:600 1rem "IBM Plex Sans",sans-serif;color:#1C2321;margin:10px 0 6px}.in1{width:100%;box-sizing:border-box;border:1.5px solid #0A4F4A;border-radius:12px;padding:12px;font:500 1rem "IBM Plex Sans",sans-serif;background:#fff}.ed2{margin:14px 0 4px}.ed2 summary{cursor:pointer;color:#5F6B66;font-size:.86rem}.okline{color:var(--gr);font-weight:600}.lnk{border:0;background:none;color:#0A4F4A;text-decoration:underline;padding:4px 0;font:600 .84rem "IBM Plex Sans",sans-serif}.pvx{display:block;margin:0 0 8px;border:0;border-radius:99px;background:#fff;color:#0A4F4A;font:600 .9rem "IBM Plex Sans",sans-serif;padding:8px 14px}.pvo{flex-direction:column;justify-content:center}'
+  + '.newc{display:inline-block;background:#C9A97A;color:#1F2B44;border-radius:4px;padding:0 5px;font:600 .62rem "IBM Plex Sans",sans-serif;vertical-align:2px}.nm2{flex:0 0 34px;font:400 1.1rem Anton,Impact,sans-serif;color:#1F2B44}.sc2.done .nm2{color:#fff}.spn{display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-1px}@keyframes sp{to{transform:rotate(360deg)}}.btn.alt .spn{border-color:#0A4F4A;border-top-color:transparent}.sug{border:1px solid #E3DDD1;border-radius:12px;padding:6px 10px;margin:4px 0 8px;background:#fff}.srcx{font-size:.7em;color:#8A6F3E}'
   + '.sw{display:flex;align-items:center;justify-content:space-between;border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:10px 12px;margin:10px 0;font:500 .86rem "IBM Plex Sans",sans-serif}</style>';
 
 export function cardPage(c, key) {
   const k = encodeURIComponent(key);
   if (!c || c.stub) return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE</div><h1>Huddle</h1><div class=hc><p class=hs>' + esc(c ? nextStep(c) : "No card yet.") + "</p></div>";
-  const D = { card: cardOut(c), prev: null, key, weeks: (c.weeks || []), sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS, meta: FIELD_META, slideFields: Object.fromEntries([...new Set(HUDDLE_FIELDS.map((r) => r[1]))].filter(Boolean).map((n) => [n, HUDDLE_FIELDS.filter((r) => r[1] === n).map((r) => r[0])])) };
-  return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
+  const D = { card: cardOut(c), prev: null, key, weeks: (c.weeks || []), sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS, desc: DESC, order: SLIDE_ORDER, meta: FIELD_META, slideFields: Object.fromEntries([...new Set(HUDDLE_FIELDS.map((r) => r[1]))].filter(Boolean).map((n) => [n, HUDDLE_FIELDS.filter((r) => r[1] === n).map((r) => r[0])])) };
+  return '<div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
     + '<div id=hud></div><div class=sheet id=sh><div class=in id=shi></div></div>'
     + '<script>var HD=' + jsonIn(D) + ';</script><script>' + CARD_JS + '</script>';
 }
@@ -532,14 +614,12 @@ var show=function(v){if(v==null||v==="")return '<span class=empty-f>[placeholder
 function api(b,cb){b.date=C.date;fetch("/momo/work/huddle/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){C=j.card;draw();if(cb)cb()}else if(window.momoConfirm)momoConfirm(false,"Not saved",(j&&j.error)||"Try again.")}).catch(function(){})}
 function sec(id){for(var i=0;i<C.sections.length;i++)if(C.sections[i].id===id)return C.sections[i]}
 function draw(){
- var h='<h1 id=hwk>'+e(C.week_prefix||"")+e(C.week_label)+'</h1><div class=hc><p class=hs id=hnext>'+e(C.status)+' · next step: '+e(C.next_step)+'</p><p class=hosts>'+e(C.hosts.join(" · "))+'</p><div class=sg>';
- var firstUndone=null;C.sections.forEach(function(s){if(!s.done&&!firstUndone)firstUndone=s.id});
- C.sections.forEach(function(s){var lab=s.id==="market"?"Market ("+C.market.picked.length+" of 4)":s.name;var md=(C.momo||{})[s.id],mp=s.id==="market"?C.market.momo_pending:(md&&md.lines&&!md.accepted);var st=s.done?(s.state==="same"?"same":s.state==="skip"?"skipped":s.state==="momo"?"Momo's":"done"):mp?"Momo draft":(s.id===firstUndone?"Next":"");
-  h+='<button type=button class="sc'+(s.done?" done":s.id===firstUndone?" next":"")+'" data-s="'+s.id+'" id="sec_'+s.id+'"><b>'+e(lab)+'</b><small>Slides '+s.slides.join(", ")+'</small><span class=st>'+(s.done?'${IC.ok}':'${IC.todo}')+e(st)+'</span></button>'});
- h+='</div><div class=ph id=hph>${IC.warn}'+C.placeholders.count+' placeholder'+(C.placeholders.count===1?"":"s")+' left</div>';
- if(C.drafted_by_claude.length)h+='<div class=sw><span>'+C.drafted_by_claude.length+' field'+(C.drafted_by_claude.length===1?"":"s")+' drafted by Claude</span><button type=button class="btn alt" style="width:auto;margin:0;padding:6px 12px" id=hacc>Accept all</button></div>';
- h+='<div class=fxs><b>Fixed slides</b><p>Slide 2 · Agenda: 8 segments'+((C.edition||{}).agenda_03?' · '+e(C.edition.agenda_03):'')+((C.edition||{}).agenda_04?' · '+e(C.edition.agenda_04):'')+'</p><p>Slide 13 · Q&amp;A and shout-outs</p><p class=sl>Locked in the template. Nothing to fill.</p></div>';   // v822
- if(C.status==="Ready to build"||C.status==="Built")h+='<button type=button class=btn id=hbuild>'+(C.build_requested?"Build asked for · waiting for your Claude":C.status==="Built"?"Build again":"Build preview")+'</button>';
+ var ST=C.section_status||{},ORD=HD.order||[],tot=0,rdy=0;   // v823 - the card is her slides, numbered, in her order; one row per slide
+ ORD.forEach(function(r){var k=r[0]==="4-7"?4:1,st=r[2]?ST[r[2]]:"Done ✓";tot+=k;if(st==="Done ✓")rdy+=k});
+ var h='<div class=nav3><a href="/momo'+location.search+'">&#8592; Momo</a><a href="/momo'+location.search+'">Home</a></div><h1 id=hwk>'+e(C.week_prefix||"")+e(C.week_label)+'</h1><div class=hc><p class=hs id=hnext><b id=hready>'+rdy+' of '+tot+' slides ready</b></p><div class=sl2>';
+ ORD.forEach(function(r,i){var st=r[2]?(ST[r[2]]||""):"Fixed",cls=st==="Done ✓"||st==="Fixed"?"done":st==="Ready to check"?"chk":"todo";h+='<button type=button class="sc2 '+cls+'" data-row="'+i+'" id="row_'+i+'"'+(r[2]?' data-s="'+r[2]+'"':'')+'><span class=nm2>'+e(r[0])+'</span><span class=t2><b>'+e(r[1])+'</b>'+(/^new/.test(String(r[3]))?' <small class=newc>new</small>':'')+'</span><span class=bdg>'+e(st)+'</span></button>'});
+ h+='</div>';
+ if(C.status==="Ready to build"||C.status==="Built")h+='<button type=button class=btn id=hbuild>'+(C.build_requested?"Build asked for · waiting for your Claude":C.status==="Built"?"Build again":"Build huddle")+'</button>';
  if(C.build&&C.build.has_pdf)h+='<a class="btn alt" id=hpdf href="/momo/work/huddle/file?date='+C.date+'&kind=pdf&'+location.search.slice(1)+'">Open the preview PDF</a>';
  if(C.status==="Built")h+='<button type=button class=btn id=happ>Approve</button>';
  if(C.status==="Approved"||C.status==="Presented")h+='<a class=btn id=hpres href="/momo/work/huddle/present?date='+C.date+'&'+location.search.slice(1)+'">Presenter mode</a>';
@@ -548,7 +628,7 @@ function draw(){
  h+='</div>';
  if((HD.weeks||[]).length>1)h+='<div class=hc style="margin-top:12px"><p class=hs>All huddles</p>'+HD.weeks.map(function(w){return '<a href="?'+location.search.slice(1).replace(/(^|&)date=[^&]*/,"")+'&date='+w.date+'" style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #EFE6D6;text-decoration:none;color:#0A4F4A;font-weight:600"><span>'+e(w.label)+'</span><span style="color:#8A6F3E;font-weight:500">'+e(w.status)+'</span></a>'}).join("")+'</div>';   // v816 - the week list
  $("hud").innerHTML=h;
- document.querySelectorAll(".sc").forEach(function(b){b.onclick=function(){openSec(b.getAttribute("data-s"))}});
+ document.querySelectorAll(".sc2").forEach(function(b){b.onclick=function(){openRow(+b.getAttribute("data-row"))}});
  if($("hacc"))$("hacc").onclick=function(){api({action:"accept"})};
  if($("hbuild"))$("hbuild").onclick=function(){var n=C.placeholders.count;if(n&&!confirm(n+" placeholder"+(n===1?" is":"s are")+" still empty and will show in gold on the slides. Build anyway?"))return;api({action:"request_build"})};
  if($("happ"))$("happ").onclick=function(){if(confirm("Approve this huddle? Nothing is sent to anyone; you share the deck yourself."))api({action:"approve"})};
@@ -556,11 +636,13 @@ function draw(){
 }
 function closeSh(){$("sh").classList.remove("on")}
 $("sh").onclick=function(ev){if(ev.target===$("sh"))closeSh()};
-function openSec(id,fields){var s=sec(id),src=(HD.sections.filter(function(x){return x.id===id})[0]||{}).source||"";
+function nav(){return '<div class=nav3><button type=button class=bk2 data-back=1>&#8592; Back</button><a href="/momo'+location.search+'">Home</a></div>'}   // v823 - Back and Home on every pop-up
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("[data-back]");if(b){ev.preventDefault();closeSh()}});
+function openFields(id,fields){var s=sec(id),src=(HD.sections.filter(function(x){return x.id===id})[0]||{}).source||"";
  if(id==="market"&&!fields)return openMarket();
  var keys=s.keys.concat(Object.keys(P).filter(function(k){return ((HD.secOf||{})[k]===id)&&s.keys.indexOf(k)<0}));
  var skipped=(C.skip_slides||[]).length&&s.slides.every(function(n){return C.skip_slides.indexOf(n)>=0});
- var wh=(HD.sections.filter(function(x){return x.id===id})[0]||{}).where||"";var h='<h2>'+e(s.name)+'</h2><p class=hs>Shown on '+e(wh)+' (slide'+(s.slides.length>1?'s ':' ')+s.slides.join(" and ")+') · '+e(src)+'</p>';
+ var wh=(HD.sections.filter(function(x){return x.id===id})[0]||{}).where||"";var h=nav()+'<h2>'+e(s.name)+'</h2><p class=hs>Shown on '+e(wh)+' (slide'+(s.slides.length>1?'s ':' ')+s.slides.join(" and ")+') · '+e(src)+'</p>';
  var md=(C.momo||{})[id];if(md&&md.lines)h+='<div class=mo><label>'+(md.accepted?"Momo's draft · accepted":"Drafted by Momo")+'</label>'+md.lines.map(function(l){return '<p>'+e(l)+'</p>'}).join("")+(md.note?'<p class=mn>'+e(md.note)+'</p>':'')+(md.accepted?'':'<button type=button class=btn id=bmomo>Accept</button>')+'</div>';
  h+=preview(id,keys);   // v815 - see the slide while filling it
  if(id==="celebrations"&&md&&(md.birthdays||[]).length)h+='<div class=mo><label>Birthdays this week</label>'+md.birthdays.map(function(x){return '<label class=bdt><input type=checkbox data-bd="'+e(x.key)+'"'+(x.on?" checked":"")+'> <b>'+e(x.name)+'</b> <small>'+e(x.when)+'</small></label>'}).join("")+'<p class=mn><a href="/momo/work/huddle/birthdays'+location.search+'">Birthdays list</a></p></div>';
@@ -577,17 +659,21 @@ function openSec(id,fields){var s=sec(id),src=(HD.sections.filter(function(x){re
  if(s.done)h+='<button type=button class="btn alt" id=breo>Mark not done</button>';
  $("shi").innerHTML=h;$("sh").classList.add("on");
  $("shi").querySelectorAll("[data-bd]").forEach(function(x){x.onchange=function(){api({action:"bday_toggle",section:"celebrations",key:x.getAttribute("data-bd"),on:x.checked},function(){openSec("celebrations")})}});
- $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
+ $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML='<button type=button class=pvx>&#8592; Close</button>'+x.outerHTML;o.lastChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
  if($("bmomo"))$("bmomo").onclick=function(){api({action:"accept_momo",section:id},closeSh)};
  $("bsame").onclick=function(){api({action:"same",section:id},closeSh)};
  $("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.oninput=function(){var c=$("shi").querySelector('[data-c="'+t.getAttribute("data-k")+'"]');if(c){c.textContent=t.value.length+" / "+t.getAttribute("maxlength");c.className="cc"+(t.value.length>=+t.getAttribute("maxlength")?" full":"")}}});
  $("bedit").onclick=function(){$("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.style.display="block"});$("shi").querySelectorAll(".cc").forEach(function(c){c.style.display="block"});$("bsr").style.display="none";$("bedw").style.display="block";var f=$("shi").querySelector("textarea[data-k]")||$("bmed");if(f)f.focus()};   // v813 - Edit opens the text; only Save saves
- $("bcancel").onclick=function(){openSec(id)};
+ $("bcancel").onclick=function(){openFields(id,true)};
  $("bsave").onclick=function(){var tas=$("shi").querySelectorAll("textarea[data-k]");if(tas.length){var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(t.getAttribute("data-arr")==="1"){x=x.split("\n").map(function(y){return y.trim()}).filter(Boolean)}else if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)}else{var tx=$("bmed").value;if(!tx.trim()){$("bmed").focus();return}api({action:"momo_edit",section:id,text:tx},closeSh)}};
  $("bskip").onchange=function(){api({action:"skip",section:id,on:this.checked},closeSh)};
  if($("breo"))$("breo").onclick=function(){api({action:"reopen",section:id},closeSh)};
 }
-function preview(id,keys){var s=sec(id),md=(C.momo||{})[id],ed=C.edition||{},SF=HD.slideFields||{},M=HD.meta||{};   // v822 - FN palette: navy #1F2B44, gold #C9A97A, blush #F9F1EF, Anton + Inter
+function preview(id,keys){var s=sec(id),md=(C.momo||{})[id],ed=C.edition||{},SF=HD.slideFields||{},M=HD.meta||{};
+ if(!s.slides.length){var X=C.extra_slides||{},o=id==="project"?X.project_of_week:id==="mortgage"?X.mortgage:null,src=X.project_sources||{},ph2=function(t){return t?e(t):'<span class=phd>[placeholder]</span>'};
+  var rows2=id==="shoutouts"?((X.shoutouts||{}).items||[]).map(function(x){return '<li>'+(x.to?'<b>'+e(x.to)+'</b>: ':'')+e(x.message)+'</li>'}).join("")||'<li>Who deserves a shout-out this week? (standing slide)</li>':Object.keys(o||{}).filter(function(k){return !/_notes$|_source$|_headline$|project_name/.test(k)}).map(function(k){return '<li>'+ph2(o[k])+(src[k]?' <small class=srcx>source: developer</small>':'')+'</li>'}).join("");
+  var ttl=id==="shoutouts"?"SHOUT-OUTS":id==="project"?((o&&o.project_name)||"Project of the week"):((o&&o.mort_headline)||"Mortgage & partners");
+  return '<p class=hs style="margin:6px 0 4px">Preview of the slide (tap to enlarge)</p><div class=pvg><div class=pvw><div class=pvt><span class=pve>'+e(s.name)+'</span><span class=pvp>PREVIEW</span></div><div class=pvn>'+e(ttl)+'</div><ul>'+rows2+'</ul>'+(o&&(o.project_source||o.mort_source)?'<div class=pvs>'+e(o.project_source||o.mort_source)+'</div>':'')+'<div class=pvf>CONFIDENTIAL · FN Realty internal use only · '+e(C.week_label)+' · new slide</div></div></div>'}   // v822 - FN palette: navy #1F2B44, gold #C9A97A, blush #F9F1EF, Anton + Inter
  var val=function(k){var v=ed[k];if(Array.isArray(v))return v.join(" · ");return v==null?"":String(v)};
  var ph=function(t){return t?e(t):'<span class=phd>[placeholder]</span>'};
  var thumbs=s.slides.map(function(n){var fs=(SF[n]||[]).filter(function(k){return !/_notes$/.test(k)}),lab=fs.length&&M[fs[0]]?M[fs[0]].label:("Slide "+n);
@@ -599,7 +685,7 @@ function preview(id,keys){var s=sec(id),md=(C.momo||{})[id],ed=C.edition||{},SF=
  if(C.build&&C.build.slides)h+='<p class=hs style="margin:8px 0 4px">Last built slide'+(s.slides.length>1?'s':'')+'</p><div class=pvi>'+s.slides.filter(function(n){return n<=C.build.slides}).map(function(n){return '<img alt="Slide '+n+'" src="/momo/work/huddle/file?date='+C.date+'&kind=slide&n='+n+'&'+location.search.slice(1)+'">'}).join("")+'</div>';
  return h}
 function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
- function body(){var W=C.market.why||{},h='<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
+ function body(){var W=C.market.why||{},h=nav()+'<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
   if(C.market.momo_pending)h+='<div class=mo><label>Momo ranked the topics and pre-ticked 4</label><p>Change any tick, or accept them as they are.</p><button type=button class=btn id=macc>Accept Momo\'s 4</button></div>';
   if(C.market.cp_code||C.market_for_pdf.length)h+='<div class=mo><label>Also done with these 4</label>'+(C.market.cp_code?'<p>Draft market post in your Content Planner ('+e(C.market.cp_code)+'), not published</p>':'')+(C.market_for_pdf.length?'<p>Marked for the team market PDF</p>':'')+'</div>';
   h+=preview("market",[]);
@@ -609,10 +695,43 @@ function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
   h+='</div><button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
   $("shi").querySelectorAll(".tc").forEach(function(d){d.onclick=function(){var id=d.getAttribute("data-t"),i=pick.indexOf(id);if(i>=0)pick.splice(i,1);else if(pick.length<4)pick.push(id);body()}});
   $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)};
-  $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
-  if($("mfields"))$("mfields").onclick=function(){openSec("market",true)};
+  $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML='<button type=button class=pvx>&#8592; Close</button>'+x.outerHTML;o.lastChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
+  if($("mfields"))$("mfields").onclick=function(){openFields("market",true)};
   if($("macc"))$("macc").onclick=function(){api({action:"accept_momo",section:"market"},closeSh)}}
  body();$("sh").classList.add("on")}
+// v823 - the simple sheet: a line of what it is, ONE input, then the slide preview with Accept / Redo; "Edit details" (collapsed) opens the field editor
+function openSec(id){if(id==="market")return openMarket();
+ var s=sec(id),t=(C.section_status||{})[id]||"",d=(C.drafts||{})[id],md=(C.momo||{})[id],h=nav()+'<h2>'+e(s.name)+'</h2><p class=hs>'+e((HD.desc||{})[id]||"")+'</p>',filled=t==="Ready to check"||t==="Done ✓";
+ if(id==="theme"){h+='<label class=q1 for=yturl>Paste this week\'s YouTube link</label><input id=yturl class=in1 inputmode=url placeholder="https://youtu.be/..." value="'+e((d&&d.url)||C.form.clip_url||"")+'"><button type=button class=btn id=ytgo>'+(filled?"Read a different link":"Read the clip")+'</button><p class=hs id=ytmsg></p>';
+  if(d)h+='<p class=mn>'+(d.captions?"Drafted from the clip\'s captions, title and description.":"No captions were available for this clip: drafted from its title and description only.")+'</p>'}
+ else if(id==="tip"){h+=(d&&d.lib?'<p class=q1>Use this week\'s suggested tip?</p>':'<p class=q1>Your tip</p>')}
+ else if(id==="celebrations"){h+='<p class=q1>Here are this week\'s birthdays and days. Accept?</p>'+(md&&(md.birthdays||[]).length?'<div class=mo><label>Birthdays</label>'+md.birthdays.map(function(x){return '<label class=bdt><input type=checkbox data-bd="'+e(x.key)+'"'+(x.on?" checked":"")+'> <b>'+e(x.name)+'</b> <small>'+e(x.when)+'</small></label>'}).join("")+'</div>':'<p class=hs>No birthdays on your list this week.</p>')}
+ else{var Q={recognition:["Who closed this week?","Name, deal type, project or area - one per line"],announcements:["Paste the updates","All of them in one box: Momo sorts them by department"],project:["Project name + developer link or brochure","Project name on the first line, then the developer's link or brochure / price-list text"],mortgage:["Bank / partner updates","Paste what the banks and partners sent"],schedule:["Paste the MD's week","One line per item, e.g. Tuesday 10:00 Emaar briefing at their office (mandatory). Add a line: Focus: ..."],shoutouts:["Any shout-outs to add?","Name or department: message (optional)"]}[id]||["Paste the update",""];
+  h+='<label class=q1 for=pst>'+e(Q[0])+'</label>';
+  if(id==="recognition"&&(C.sales_suggest||[]).length)h+='<div class=sug>'+C.sales_suggest.map(function(x,i){return '<label class=bdt><input type=checkbox data-sug="'+i+'"> '+e(x)+'</label>'}).join("")+'<p class=mn>From your work log: tick to add.</p></div>';
+  h+='<textarea id=pst class=in1 rows=5 placeholder="'+e(Q[1])+'">'+e((d&&d.text)||"")+'</textarea><button type=button class=btn id=pgo>'+(id==="shoutouts"?"Add the shout-outs":"Draft the slide")+'</button>'+(id==="shoutouts"?'<button type=button class="btn alt" id=snone>None this week</button>':'');
+  if(id==="schedule"&&d&&d.overflow)h+='<p class=mn>'+d.overflow+' more item(s) than the slide\'s 4 slots: kept in the speaker notes.</p>'}
+ if(filled||id==="celebrations"||id==="schedule"||id==="tip")h+=preview(id,[]);
+ if(filled&&t!=="Done ✓")h+='<div class=two><button type=button class=btn id=sacc>Accept</button>'+(id==="celebrations"?'<button type=button class="btn alt" id=sclose>Not now</button>':id==="schedule"&&!d?'<button type=button class="btn alt" id=sclose>Not now</button>':'<button type=button class="btn alt" id=sredo>'+(id==="tip"&&d&&d.lib?"Another tip":"Redo")+'</button>')+'</div>';
+ if(t==="Done ✓")h+='<p class=okline>Done ✓ This slide is ready.</p>';
+ if(id==="tip")h+='<details class=ed2><summary>Or write your own tip</summary><textarea id=pst class=in1 rows=3 placeholder="Your idea for everyone (no names)"></textarea><button type=button class="btn alt" id=pgo>Use my tip</button></details>';
+ h+='<details class=ed2><summary>Edit details</summary><p class=hs>Change single lines on the slide.</p><button type=button class="btn alt" id=efd>Open the field editor</button></details>';
+ $("shi").innerHTML=h;$("sh").classList.add("on");
+ var msg=function(t2,bad){var m=$("ytmsg");if(m){m.textContent=t2;m.style.color=bad?"#B4533C":""}};
+ var call=function(b,btn,busy){if(btn){btn.disabled=true;btn.innerHTML='<span class=spn></span> '+busy}b.date=C.date;fetch("/momo/work/huddle/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json","X-Momo-Confirm":"page"},body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){C=j.card;draw();if(b.action==="accept_section"){closeSh();if(window.momoToast)momoToast("Done ✓ "+s.name)}else openSec(id)}else{if(btn){btn.disabled=false;btn.textContent="Try again"}msg((j&&j.error)||"Try again.",true);if(window.momoToast)momoToast((j&&j.error)||"Not done. Try again.",{error:true})}}).catch(function(){if(btn){btn.disabled=false;btn.textContent="Try again"}msg("No connection. Try again.",true)})};
+ if($("ytgo"))$("ytgo").onclick=function(){var u=$("yturl").value.trim();if(!u){$("yturl").focus();return}msg("Reading the clip and drafting the slides…");call({action:"theme_link",section:"theme",url:u},$("ytgo"),"Reading…")};
+ if($("pgo"))$("pgo").onclick=function(){var tx=$("pst").value.trim();if(!tx){$("pst").focus();return}call({action:"paste",section:id,text:tx},$("pgo"),"Drafting…")};
+ if($("sacc"))$("sacc").onclick=function(){call({action:"accept_section",section:id},$("sacc"),"Saving…")};
+ if($("sredo"))$("sredo").onclick=function(){call({action:"redo",section:id},$("sredo"),"Drafting again…")};
+ if($("sclose"))$("sclose").onclick=closeSh;
+ if($("snone"))$("snone").onclick=function(){call({action:"accept_section",section:id},$("snone"),"Saving…")};
+ $("shi").querySelectorAll("[data-sug]").forEach(function(x){x.onchange=function(){var l=C.sales_suggest[+x.getAttribute("data-sug")],ta=$("pst"),v=ta.value.split("\n").filter(Boolean);if(x.checked){if(v.indexOf(l)<0)v.push(l)}else v=v.filter(function(y){return y!==l});ta.value=v.join("\n")}});
+ $("efd").onclick=function(){openFields(id,true)};
+ $("shi").querySelectorAll("[data-bd]").forEach(function(x){x.onchange=function(){api({action:"bday_toggle",section:"celebrations",key:x.getAttribute("data-bd"),on:x.checked},function(){openSec("celebrations")})}});
+ $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML='<button type=button class=pvx>&#8592; Close</button>'+x.outerHTML;o.lastChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
+}
+function fixedPop(title,msg,mantra){var h=nav()+'<h2>'+e(title)+'</h2><p class=q1>'+e(msg)+'</p><button type=button class=btn id=fok>OK</button>'+(mantra?'<details class=ed2><summary>Edit details</summary><button type=button class="btn alt" id=efd>Open the field editor</button></details>':'');$("shi").innerHTML=h;$("sh").classList.add("on");$("fok").onclick=closeSh;if($("efd"))$("efd").onclick=function(){openFields("mantra",true)}}
+function openRow(i){var r=(HD.order||[])[i];if(!r)return;if(!r[2])return fixedPop(r[1],"Nothing to do. This slide is fixed.");if(r[2]==="mantra")return fixedPop(r[1],r[1]==="Mantra"?"Same mantra?":"Nothing to do. Thank you, have a great week.",true);openSec(r[2])}
 window.hudOpen=openSec;draw();
 })();`;
 
@@ -674,7 +793,7 @@ export async function huddleRoute(request, env, url, deps) {
   if (p === "/momo/work/huddle/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) {}
     if (/^bd_/.test(String(b.action || ""))) { const [s2, o2] = await birthdayAction(env, b); return J(o2, s2); }   // v815 - the Birthdays list
-    const [s, o] = await cardAction(env, b); return J(o, s);
+    const [s, o] = await cardAction(env, b, undefined, deps); return J(o, s);
   }
   if (request.method !== "GET") return null;
   if (p === "/momo/work/huddle/birthdays") return H(deps.page(key, rk, birthdaysPage(await readBirthdays(env), key, MOMO_TOAST_JS)));   // v815

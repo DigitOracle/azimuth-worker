@@ -68,7 +68,7 @@ ok(r[0] === 400 && /leave out names/.test(r[1].error), "the tip is never aimed a
 // the page: labels, maxlength + counter, notes multi-line, fixed read-only, the fixed slides, FN-palette previews
 const page = await (await Hd.huddleRoute(new Request("https://x/momo/work/huddle?key=K&date=2026-11-09"), env, new URL("https://x/momo/work/huddle?key=K&date=2026-11-09"), { person: () => "najjuko", page: (k, rk, b) => "<html><body>" + b + "</body></html>" })).text();
 ok(page.includes('maxlength="') && page.includes("data-c=") && page.includes(".cc.full") && /notes\/\.test\(M\.type\|\|""\)\?7/.test(page), "editor: maximum, live counter, notes multi-line");
-ok(page.includes(" <span class=sl>fixed</span>") && page.includes("Fixed slides") && page.includes("Slide 13 · Q&amp;A and shout-outs"), "fixed fields and slides 2 and 13 read-only");
+ok(page.includes(" <span class=sl>fixed</span>") && page.includes("Nothing to do. This slide is fixed.") && page.includes('"Agenda",""'), "fixed fields read-only; the agenda is a fixed slide (v823 list)");
 ok(page.includes("#F9F1EF") && page.includes("#C9A97A") && page.includes("family=Anton") && page.includes("PREVIEW") && page.includes("CONFIDENTIAL · FN Realty internal use only"), "previews in the FN palette and fonts, labelled preview, with the confidentiality footer");
 new Function(page.slice(page.indexOf("(function(){")).replace(/<\/script>[\s\S]*$/, "")); ok(true, "the card script parses");
 console.log("test_v822_huddle_fields: " + n + " checks passed");

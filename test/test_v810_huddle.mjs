@@ -28,7 +28,7 @@ ok((await Hd.huddleTick(env, ms("2026-10-28"))) === null && !(await store.get("h
 // ---- section map: field-agnostic, keys placed by FIELD_SECTION, slide prefix, or name prefix; unknown keys are kept ----
 ok(Hd.sectionOfKey("s04_headline") === "market" && Hd.sectionOfKey("slide12_mon") === "schedule" && Hd.sectionOfKey("theme_title") === "theme" && Hd.sectionOfKey("birthdays_this_week") === "celebrations", "section map by prefix");
 ok(Hd.sectionOfKey("zz_unknown") === "" && Hd.sectionOfKey("skip_slides") === "", "unmapped key is not forced into a section");
-ok(Hd.SECTIONS.length === 8 && Hd.SECTIONS.map((s) => s.slides.join(",")).join("|") === "1,3|4,5,6,7|8|9|10|11|12|14,15", "8 sections with the PDF's slide numbers");
+ok(Hd.SECTIONS.filter((s) => s.slides.length).map((s) => s.slides.join(",")).join("|") === "1,3|4,5,6,7|8|9|10|11|12|14,15", "the template sections keep the PDF's slide numbers (v823 adds project, mortgage, shout-outs)");
 ok(Hd.SEGMENTS.length === 8 && Hd.SEGMENTS.reduce((a, s) => a + s.min, 0) === 31, "8 presenter segments, about 30 minutes");
 ok(Hd.HOSTS[0] === "Ali Kalhor" && Hd.HOSTS[1] === "Najjuko", "Ali Kalhor above Najjuko");
 
@@ -111,6 +111,7 @@ ok((await Hd.getCard(env, "2026-11-09")).status !== "Approved", "the card is not
 // ---- market pick, accept drafts, build ----
 r = await page({ action: "pick", ids: ["t0", "t1", "t2", "t3", "t4"] });
 ok(r[0] === 400, "more than 4 topics refused");
+for (const sx of ["project", "mortgage"]) await page({ action: "accept_section", section: sx });   // v823: two new slides in her deck
 r = await page({ action: "pick", ids: ["t0", "t1", "t2", "t3"] });
 ok(r[1].card.status === "Ready to build" && r[1].card.next_step === "build the preview", "4 picks: Ready to build");
 const pdf = Buffer.from("%PDF-1.4 test").toString("base64"), pptx = Buffer.from("PK\x03\x04pptx").toString("base64"), png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2]).toString("base64");
