@@ -16,6 +16,7 @@
 // no client, no availability sheet) is ever on it. Making a link needs Kendall's or Najjuko's key.
 
 import puppeteer from "@cloudflare/puppeteer";
+import { DNA_TL_ART } from "./dna_timeline_art.js";   // v805b
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = (v) => Math.round(Number(v) || 0).toLocaleString("en-US");
@@ -194,17 +195,37 @@ export function dnaPanel(name, d) {
   if (!d) return "";
   const yr = String(d.first_project_start || "").slice(0, 4);
   const stat = (big, lab) => '<div class=ds><b>' + big + "</b><span>" + lab + "</span></div>";
-  const live = Number(d.live_projects) || 0, esc_ok = Number(d.live_with_escrow_agent) || 0, act = Number(d.active_with_planned_end) || 0, late = Number(d.active_past_planned_end) || 0;
+  const act = Number(d.active_with_planned_end) || 0, late = Number(d.active_past_planned_end) || 0;
   const lines = [
-    live ? I(IC.key, 26) + "<p><b>" + esc_ok + " of " + live + "</b> live projects have an escrow account" + (d.main_live_agent_bank ? ", mostly with " + esc(String(d.main_live_agent_bank).replace(/\s*\(.*\)\s*/g, "").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())) : "") + "</p>" : "",
     act ? I(IC.plan, 26) + "<p><b>" + late + " of " + act + "</b> projects under way are past their planned end date</p>" : "",
     d.median_build_months_since_2023 ? I(IC.ruler, 26) + "<p>Typical build time: <b>" + Math.round(d.median_build_months_since_2023) + " months</b> (projects finished since 2023)</p>" : "",
-    d.contracted_offplan_sales_live_escrow ? I(IC.note, 26) + "<p><b>" + nf(d.contracted_offplan_sales_live_escrow) + "</b> off-plan sales, " + bn(d.contracted_offplan_aed_live_escrow) + ", in its live projects</p>" : "",
   ].filter(Boolean).map((x) => "<div class=dl>" + x + "</div>").join("");
   return '<div class=dna><div class=dh><span>DEVELOPER DNA</span><h3>' + esc(name) + "</h3>" + (yr ? "<i>On the Dubai Land Department register since " + yr + "</i>" : "") + "</div>"
     + '<div class=dg>' + stat(nf(d.projects_total), "projects registered") + stat(nf(d.projects_finished), "finished") + stat(nf(d.projects_active), "under way")
     + stat(nf(d.registered_units_finished), "homes handed over") + stat(nf(d.registered_units_live), "homes in build") + "</div>" + lines
-    + '<div class=dsrc>Source: Dubai Land Department project and escrow registers, as of ' + esc(dSay(d.as_of)) + ". All companies trading under the brand.</div></div>";
+    + '<div class=dsrc>Source: Dubai Land Department project register, as of ' + esc(dSay(d.as_of)) + ". All companies trading under the brand.</div></div>";
+}
+
+
+// v805b (Kendall 8 Nov: "how many villas are landing in 2027, how many mixed use or commercial ... build it as a nice timeline"). What the
+// developer hands over each year, 2026 to 2030, from the projects register's planned end dates; the kind of each project from its own
+// off-plan sales (launch_dev_dna.TL_SQL). The artwork is decoration made through the image API; every figure is laid over it here.
+const TL_X = [11, 30, 50, 70, 89];
+export function dnaTimeline(name, d) {
+  const t = d && d.timeline; if (!t) return "";
+  const yrs = Object.keys(t).sort();
+  if (!yrs.some((y) => Object.keys(t[y] || {}).length)) return "";
+  const col = (y, i) => {
+    const v = t[y] || {}, rows = [];
+    if (v.apartment) rows.push("<b>" + nf(v.apartment.homes) + "</b> apartments<i>" + v.apartment.projects + " project" + (v.apartment.projects === 1 ? "" : "s") + "</i>");
+    if (v.villa) rows.push("<b>" + v.villa.projects + "</b> villa project" + (v.villa.projects === 1 ? "" : "s") + (v.villa.homes ? "<i>" + nf(v.villa.homes) + " homes</i>" : ""));
+    if (v.commercial) rows.push("<b>" + v.commercial.projects + "</b> commercial / mixed use");
+    if (!rows.length) rows.push("<span class=tln>nothing due</span>");
+    return '<div class=tlc style="left:' + TL_X[i] + '%"><div class=tly>' + y + "</div>" + rows.map((r) => "<p>" + r + "</p>").join("") + "</div>";
+  };
+  return '<div class=tlw><div class=tlh><span>WHAT ' + esc(String(name).toUpperCase()) + ' HANDS OVER</span><i>Planned completions on the Dubai Land Department projects register, by year</i></div>'
+    + '<div class=tlb><img src="' + DNA_TL_ART + '" alt=""><div class=tlcs>' + yrs.slice(0, 5).map(col).join("") + "</div></div>"
+    + '<div class=dsrc2>Kind of home from each project\'s own off-plan sales. Villa projects often register no unit count until handover. Planned dates can move.</div></div>';
 }
 
 export function coverPage(rows, data, title, sub, total, by, dna) {
@@ -218,7 +239,7 @@ export function coverPage(rows, data, title, sub, total, by, dna) {
       + (p ? '<div class=chero><img src="' + esc(p.url) + '" alt=""><span class=cr>Image: ' + esc(p.credit || (e && e.credit) || "") + "</span></div>" : '<div class="chero none"><span>' + esc(String(r.developer || "?").slice(0, 1)) + "</span></div>")
       + '<div class=ctt><h1>' + esc(r.project) + "</h1>" + (price ? "<div class=pr>" + esc(price) + "</div>" : "") + "</div>"
       + '<div class=csb>' + esc([r.developer, r.area].filter(Boolean).join(" · ")) + "</div><div class=chips>" + chips + "</div>"
-      + (d ? dnaPanel(r.developer, d) : '<div class=dna><div class=dh><span>DEVELOPER DNA</span><h3>' + esc(r.developer || "Developer") + "</h3><i>No register record matched this developer yet.</i></div></div>")
+      + (d ? dnaPanel(r.developer, d) + dnaTimeline(r.developer, d) : '<div class=dna><div class=dh><span>DEVELOPER DNA</span><h3>' + esc(r.developer || "Developer") + "</h3><i>No register record matched this developer yet.</i></div></div>")
       + footer(1, total, by) + "</section>";
   }
   const cards = rows.map((r, i) => {
@@ -255,6 +276,10 @@ export const REPORT_CSS = '@page{size:1080px 1920px;margin:0}*{box-sizing:border
   + '.dl{display:flex;align-items:center;gap:12px;margin-top:8px}.dl p{margin:0;font-size:19px;color:#F3E7CF}.dl b{color:#fff}.dsrc{font-size:14px;color:#A9C4BD;margin-top:12px}'
   + '.cover .cth{font:700 52px Fraunces,Georgia,serif;color:' + NAVY + ';margin:10px 0 4px;text-align:left}.cover .lead{text-align:left;margin:0 0 14px}.cover .note{text-align:left}'
   + '.mapimg{filter:saturate(.85)}'
+  + '.tlw{margin-top:18px;background:#fff;border:2px solid ' + GOLD + ';border-radius:22px;padding:18px 22px 14px}.tlh span{font:600 17px "IBM Plex Sans",sans-serif;letter-spacing:.16em;color:' + GOLD + '}.tlh i{display:block;font-size:17px;color:' + MUTE + ';font-style:normal;margin-top:2px}'
+  + '.tlb{position:relative;margin-top:8px}.tlb img{width:100%;display:block}.tlcs{position:relative;height:150px}.tlc{position:absolute;top:4px;transform:translateX(-50%);width:19%;text-align:center}'
+  + '.tly{font:700 30px Fraunces,Georgia,serif;color:' + NAVY + ';margin-top:-6px}.tlc p{margin:4px 0 0;font-size:16px;line-height:1.25;color:' + INK + '}.tlc b{font:700 20px Fraunces,Georgia,serif;color:#0A4F4A}.tlc i{display:block;font-style:normal;font-size:13px;color:' + MUTE + '}.tln{color:' + MUTE + ';font-size:15px}'
+  + '.dsrc2{font-size:13px;color:' + MUTE + ';margin-top:6px}'
   + '@media print{.bar{display:none}body{background:none}.pg{margin:0}}';
 
 const ZOOM_JS = '<script>(function(){function z(){var s=Math.min(1,(window.innerWidth-8)/1080);document.querySelectorAll(".pg").forEach(function(p){p.style.zoom=s})}z();addEventListener("resize",z)})()</script>';
