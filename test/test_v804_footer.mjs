@@ -7,6 +7,6 @@ const e = { source: "Video: Imtiaz Developments, YouTube", pin_basis: "area",
   marks: [{ name: "Burj Khalifa", km: 32.0, dir: "north-east" }, { name: "Airport (DXB)", km: 42.3, dir: "north-east" }] };
 const html = "<!doctype html><meta charset=utf-8><style>" + REPORT_CSS + "</style>" + launchPage(r, e, 1, 2, "Test", "kendall");
 writeFileSync(process.argv[2] || "v804_page.html", html);
-if (!/NW/.test(html) || /north-west/.test(html.replace(/<style>[\s\S]*?<\/style>/, ""))) throw new Error("directions not shortened");
+// v807: the distance table (and its compass directions) was removed from the report
 if (/\.ft\{position:absolute/.test(html)) throw new Error("footer still absolute");
 console.log("v804 footer: html checks ok");

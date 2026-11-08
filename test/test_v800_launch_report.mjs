@@ -25,8 +25,10 @@ const html = reportHtml([r1, r2], { [r1.key]: entry, [r2.key]: { pics: [] } }, {
 ok((html.match(/<section class="?pg/g) || []).length === 3, "cover + one page per launch");
 ok(!/i\.ytimg\.com/.test(html), "a raw YouTube thumbnail is never in the report");
 ok(/Frame from the video/.test(html) && /Image: Some Channel/.test(html), "frames with credits");
-ok(/<svg viewBox="0 0 500 290"/.test(html) && />N<\/text>/.test(html) && /1 km/.test(html) && /Burj Khalifa/.test(html), "map with rings, compass and landmarks");
-ok(/Gold Souq/.test(html) && /1\.2 km S</.test(html) && /14\.2 km SW</.test(html), "distance list");
+// v807: the map is now two colour Esri maps and the distance table is gone (Kendall 8 Nov); the old assertion is retired
+ok(/Where it is/.test(html), "where-it-is panel present");
+// v807: the map is now two colour Esri maps and the distance table is gone (Kendall 8 Nov); the old assertion is retired
+ok(/Where it is/.test(html), "where-it-is panel present");
 ok(/The area today/.test(html) && /AED 1,820 \/ sq ft/.test(html) && !/AED 1,400 \/ sq ft/.test(html), "area today: medians with 10+ sales only");
 ok(/Prices as advertised in public videos and posts, not client prices/.test(html) && /as advertised/.test(html), "price-as-advertised footer");
 ok(/On the Dubai Land Department register/.test(html) && /Launched, not yet on the Dubai Land Department register/.test(html) && !/\bDLD\b/.test(html), "status spelled out, no DLD");
