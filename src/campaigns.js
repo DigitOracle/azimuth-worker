@@ -19,6 +19,7 @@
 //   camp_link_<code>        {cid, d, url, clicks, first} - /c/<code> logs the click and redirects
 // Never touches picjob_*, gmp_*, gcal_state.
 import { WA_TEMPLATES } from "./wa_templates.js";
+import { MOMO_TOAST_JS } from "./momo_toast.js";   // v816
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c]));
 const DIG = (s) => String(s || "").replace(/[^0-9]/g, "");
@@ -514,7 +515,7 @@ export function buildPayload(c, contact, link) {
 }
 async function buildQueue(env, c) {
   const ix = await getJ(env, "camp_contact_index", []), list = [];
-  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }
+  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && !k.removed && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }   // v816 - removed contacts skipped
   return { list, pos: 0, built: new Date().toISOString() };
 }
 
@@ -574,7 +575,8 @@ export async function campStep(env, c, deps, dry) {
     if (!k) { skip("gone"); continue; }
     if (await isOptedOut(env, d)) { skip("opted_out"); continue; }   // checked before EVERY message (v726: also the hashed "forget me" entries)
     if (k.opted_out) { skip("opted_out"); continue; }
-    if (k.undeliverable) { skip("undeliverable"); continue; }   // v726 - 131026 once: never again
+    if (k.undeliverable) { skip("undeliverable"); continue; }
+    if (k.removed) { skip("removed"); continue; }   // v816   // v726 - 131026 once: never again
     if (c.vars.includes("why") && !k.why) { skip("no_reason_line"); continue; }   // the template must say why they are receiving it
     if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
     if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
@@ -669,6 +671,14 @@ export async function campaignRoute(request, env, url, deps) {
   const now = (deps && deps.now) || Date.now();
   const viewer = campViewer(env, url, deps);
   if (p === "/momo/campaigns/unread" && request.method === "GET") return J(Object.assign({ ok: true, viewer }, await unreadAll(env, viewer)));   // v806
+  if ((p === "/momo/campaigns/audience" || p === "/momo/campaigns/contacts") && request.method === "GET") {   // v816 - owner only
+    if (!owner) return new Response("not found", { status: 404 });
+    const pg = (body) => new Response(deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>', { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    if (p === "/momo/campaigns/contacts") return pg(await contactsBody(env, key, rk, url.searchParams.get("tag") || "", MOMO_TOAST_JS));
+    const c = await getJ(env, "camp_" + String(url.searchParams.get("c") || ""), null); if (!c) return new Response("not found", { status: 404 });
+    if (url.searchParams.get("csv") === "1") { const { rows } = await audienceRows(env, c, now); return new Response(audienceCsv(rows, url.searchParams.get("full") === "1"), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="audience_' + c.id + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }
+    return pg(await audienceBody(env, c, key, rk, now));
+  }
   if (p === "/momo/campaigns" && request.method === "GET") {
     const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer);
     const html = deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>';
@@ -690,6 +700,12 @@ export async function campaignRoute(request, env, url, deps) {
   if (p === "/momo/campaigns/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ ok: false, error: "bad json" }, 400); }
     const a = String(b.action || ""), id = String(b.id || "");
+    if (a === "contact_remove" || a === "contact_restore") {   // v816 - soft remove (owner only): the record stays, the sender skips it
+      if (!owner) return J({ ok: false, error: "owner only" }, 403);
+      const d = DIG(b.d), k = d ? await getJ(env, "camp_contact_" + d, null) : null; if (!k) return J({ ok: false, error: "no such contact" }, 404);
+      if (a === "contact_remove") { k.removed = true; k.removed_at = new Date(now).toISOString(); } else { delete k.removed; delete k.removed_at; }
+      await putJ(env, "camp_contact_" + d, k); return J({ ok: true });
+    }
     if (a === "flow_put") { const { f, err } = cleanFlow(b.flow); if (err.length) return J({ ok: false, error: err }, 400); await putJ(env, "camp_flow_" + f.id, f); return J({ ok: true, flow: f }); }
     if (a === "flow_get") { const f = await getJ(env, "camp_flow_" + String(b.flow || ""), null); return f ? J({ ok: true, flow: f }) : J({ ok: false, error: "no such flow" }, 404); }
     if (a === "simulate") { const f = await getJ(env, "camp_flow_" + String(b.flow || ""), null); if (!f) return J({ ok: false, error: "no such flow" }, 404); return J({ ok: true, result: simulateFlow(f, Array.isArray(b.choices) ? b.choices : [], b.contact || { name: "Test Owner", e164: "+971500000000" }) }); }
@@ -804,7 +820,7 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
     + (nu && nu.total ? '<div class=unw><i>Since you last looked</i>' + badgeHtml(nu) + '</div>' : "")
     + '<p class=cm>' + esc(cur.template) + ' · ' + (cur.phone === "main" ? "main number" : "desk number") + ' · ' + esc(cur.window) + ' Dubai · cap ' + cur.cap + '/day · ' + esc((cur.tags || []).join(", ")) + '</p>'
     + (cur.stopped && cur.stopped.why ? '<p class=cw>Stopped: ' + esc(cur.stopped.why) + '</p>' : "") + (cur.live_requested && cur.status !== "live" ? '<p class=cm>Go-live asked ' + esc(cur.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
-    + '<div class=cba>' + acts.join("") + '</div><p class=cr id="res_' + esc(cur.id) + '"></p></div>';
+    + '<div class=cba>' + acts.join("") + '</div>' + (owner ? '<div class=cba><a class=cb id=aud_link href="/momo/campaigns/audience' + q + '&c=' + encodeURIComponent(cur.id) + '" style="text-decoration:none">Who gets this</a><a class=cb href="/momo/campaigns/contacts' + q + '" style="text-decoration:none">Contacts</a></div>' : '') + '<p class=cr id="res_' + esc(cur.id) + '"></p></div>';   // v816
   const funnel = svgFunnel([["Sent", S.sent], ["Delivered", S.delivered], ["Read", S.read], ["Replied", S.replies], ["Clicked", S.uclicks], ["To Najjuko", S.handovers || 0]]);
   // branch donut: the opener's options by their titles, plus opt-outs as "Stopped"
   let parts = [];
@@ -1185,4 +1201,82 @@ export async function campPreview(env, body, deps) {
   }
   await send(pvControls(f, d, ""));
   return { consumed: true, sent };
+}
+
+// ---------- v816 (Kendall 8 Nov): WHO GETS THIS and CONTACTS - owner only (isCampOwner), Back + Home, cards at 375 px ----------
+// "Who gets this": one row per contact, buildQueue(c) order first (the people the sender will work through), then the tagged contacts the queue leaves
+// out, each with why. Before going live the "why" is what the sender would decide now (opted out, no consent, frequency rule, outside the owner's local
+// hours, already sent); once live or done each row also shows its delivery status from camp_msgs_<id> / camp_msg_<w> / camp_status_<w>.
+// Numbers are masked to the last 4 digits; the owner can tap "show". CSV export (masked unless &full=1). Contacts: all camp_contact_index contacts,
+// filter by tag, the import each came from, the opt-out flag; Remove is soft (removed:true, kept in KV; the sender skips it; Undo restores).
+export const audMask = (e164) => { const d = DIG(e164); return d.length > 4 ? "+" + d.slice(0, Math.min(3, d.length - 4)) + " ••• " + d.slice(-4) : "••••"; };
+const AUD_WHY = { opted_out: "Opted out", undeliverable: "Not on WhatsApp (undeliverable)", no_consent: "No consent on file", no_reason_line: "No reason line for the template", tags_changed: "Tags no longer match",
+  messaged_this_week: "Frequency rule: messaged recently", owner_local_hours: "Outside the owner's local hours now (waits)", already_sent: "Already sent in this campaign", removed: "Removed from contacts", ok: "Will receive it" };
+export async function audienceRows(env, c, now) {
+  now = now || Date.now();
+  const q = await buildQueue(env, c), inQ = new Set(q.list), ix = await getJ(env, "camp_contact_index", []);
+  const freq = (c.freq_days != null ? c.freq_days : DEFAULTS.freqDays) * DAY;
+  // delivery status per contact from the campaign's messages
+  const st = {}; for (const w of await getJ(env, "camp_msgs_" + c.id, [])) { const m = await getJ(env, "camp_msg_" + w, null); if (!m || !m.d) continue; const s = await getJ(env, "camp_status_" + w, {});
+    const lab = m.optout ? "opted out" : m.replied ? "replied" : m.tap ? "button tapped" : s.read ? "read" : s.delivered ? "delivered" : (s.failed || m.st === "failed") ? "failed" : "sent"; const rank = ["sent", "failed", "delivered", "read", "button tapped", "replied", "opted out"];
+    if (!st[m.d] || rank.indexOf(lab) > rank.indexOf(st[m.d])) st[m.d] = lab; }
+  const rows = [];
+  const order = q.list.concat(ix.filter((d) => !inQ.has(d)));
+  for (const d of order) {
+    const k = await getJ(env, "camp_contact_" + d, null); if (!k) continue;
+    const tagged = (k.tags || []).some((t) => (c.tags || []).includes(t)); if (!tagged) continue;
+    let why = "ok";
+    if (k.removed) why = "removed"; else if (k.opted_out || (await isOptedOut(env, d))) why = "opted_out"; else if (k.undeliverable) why = "undeliverable";
+    else if (st[d] || k.last_camp === c.id) why = "already_sent"; else if ((c.vars || []).includes("why") && !k.why) why = "no_reason_line";
+    else if (!k.consent || !k.consent.text || !k.consent.date) why = "no_consent"; else if (k.last_mkt && now - Date.parse(k.last_mkt) < freq) why = "messaged_this_week";
+    else if (!ownerOpen(c, d, now)) why = "owner_local_hours";
+    const live = c.status === "live" || c.status === "done" || c.status === "stopped" || c.status === "paused";
+    rows.push({ d, name: k.name || "", company: k.company || "", masked: audMask(k.e164 || d), full: "+" + DIG(k.e164 || d), tags: k.tags || [], consent_date: (k.consent && k.consent.date) || "", consent_source: (k.consent && (k.consent.by || k.consent.text)) || k.source || "",
+      in_queue: inQ.has(d), why, why_text: AUD_WHY[why] || why, status: st[d] || (live && inQ.has(d) && why === "ok" ? "queued" : "") });
+  }
+  const tot = { total: rows.length, will: rows.filter((r) => r.why === "ok" || r.why === "owner_local_hours").length, excluded: rows.filter((r) => !["ok", "owner_local_hours", "already_sent"].includes(r.why)).length, sent: rows.filter((r) => r.status && r.status !== "queued").length };
+  for (const r of rows) tot[r.why] = (tot[r.why] || 0) + 1;
+  return { rows, totals: tot };
+}
+export function audienceCsv(rows, full) {
+  const q = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+  return ["name,company,number,tags,consent_date,consent_source,in_queue,why,status"].concat(rows.map((r) => [r.name, r.company, full ? r.full : r.masked, r.tags.join("; "), r.consent_date, r.consent_source, r.in_queue ? "yes" : "no", r.why_text, r.status].map(q).join(","))).join("\n");
+}
+const AUD_CSS = "<style>.ag{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 12px}.agc{border:1px solid #E3DDD1;border-radius:14px;background:#FFFDF9;padding:10px;text-align:center}.agc b{display:block;font:600 1.3rem 'IBM Plex Sans',sans-serif;color:#0A4F4A}.agc i{font:500 .74rem 'IBM Plex Sans',sans-serif;color:#5F6B66;font-style:normal}"
+  + ".ar{border:1px solid #E3DDD1;border-radius:14px;background:#FFFDF9;padding:10px 12px;margin:8px 0;display:flex;flex-direction:column;gap:4px}.ar.x{background:#F7F3EA;opacity:.85}.ar b{font:600 .95rem 'IBM Plex Sans',sans-serif;overflow-wrap:anywhere}.ar .n{font:500 .82rem 'IBM Plex Mono',monospace;color:#1C2321;display:flex;gap:8px;align-items:center}.ar .n button{border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:8px;padding:2px 8px;font:600 .72rem 'IBM Plex Sans',sans-serif}"
+  + ".ar .m{font:500 .76rem 'IBM Plex Sans',sans-serif;color:#5F6B66}.chips{display:flex;flex-wrap:wrap;gap:4px}.chp{border-radius:99px;padding:2px 9px;font:600 .7rem 'IBM Plex Mono',monospace;background:#F3EFE7;color:#5F6B66}.chp.ok{background:#E6F2EC;color:#2F7D5B}.chp.no{background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A}.chp.st{background:#0A4F4A;color:#fff}"
+  + ".nav2{display:flex;gap:10px;margin:0 0 6px}.nav2 a{color:#0A4F4A;font-weight:600;text-decoration:none}.abt{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.abt a,.abt button{border:1.5px solid #0A4F4A;border-radius:12px;padding:9px 12px;font:600 .84rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;background:#fff;text-decoration:none}.ft{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}.ft a{border:1px solid #E3DDD1;border-radius:99px;padding:5px 11px;font:600 .78rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;text-decoration:none;background:#fff}.ft a.on{background:#0A4F4A;color:#fff;border-color:#0A4F4A}</style>";
+function navTop(q, back, backLab) { return "<div class=nav2><a class=back href='" + back + "'>&#8592; " + esc(backLab) + "</a><a href='/momo" + q + "'>Home</a></div>"; }
+export async function audienceBody(env, c, key, rk, now) {
+  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : ""), { rows, totals } = await audienceRows(env, c, now);
+  const live = ["live", "done", "stopped", "paused"].includes(c.status);
+  const tiles = [["In the audience", totals.total], ["Will receive it", totals.will], ["Left out", totals.excluded], live ? ["Sent so far", totals.sent] : ["Outside hours now", totals.owner_local_hours || 0]];
+  return navTop(q, "/momo/campaigns" + q + "&c=" + encodeURIComponent(c.id), "Campaign") + "<div class=tag>CAMPAIGN · OWNER ONLY</div><h1>Who gets this</h1><p class=m style='color:#5F6B66;margin:0'>" + esc(c.name || c.id) + " · tags " + esc((c.tags || []).join(", ")) + " · " + esc(c.status) + "</p>" + AUD_CSS
+    + "<div class=ag>" + tiles.map((t) => "<div class=agc><b>" + t[1] + "</b><i>" + esc(t[0]) + "</i></div>").join("") + "</div>"
+    + "<div class=abt><a href='/momo/campaigns/audience" + q + "&c=" + encodeURIComponent(c.id) + "&csv=1'>Download CSV</a><a href='/momo/campaigns/contacts" + q + "'>Contacts</a></div>"
+    + (rows.length ? rows.map((r) => "<div class='ar" + (r.why === "ok" || r.why === "owner_local_hours" ? "" : " x") + "'><b>" + esc(r.name || "(no name)") + (r.company ? " · " + esc(r.company) : "") + "</b>"
+      + "<span class=n><span class=num data-full='" + esc(r.full) + "' data-mask='" + esc(r.masked) + "'>" + esc(r.masked) + "</span><button type=button class=shw>show</button></span>"
+      + "<div class=chips>" + r.tags.map((t) => "<span class=chp>" + esc(t) + "</span>").join("") + "</div>"
+      + "<span class=m>Consent " + esc(r.consent_date || "none") + (r.consent_source ? " · " + esc(r.consent_source) : "") + "</span>"
+      + "<div class=chips><span class='chp " + (r.why === "ok" ? "ok" : "no") + "'>" + esc(r.why_text) + "</span>" + (r.status ? "<span class='chp st'>" + esc(r.status) + "</span>" : "") + "</div></div>").join("") : "<p class=m>No contacts carry this campaign's tags yet.</p>")
+    + "<script>document.querySelectorAll('.shw').forEach(function(b){b.onclick=function(){var s=b.previousSibling,on=s.textContent===s.getAttribute('data-full');s.textContent=on?s.getAttribute('data-mask'):s.getAttribute('data-full');b.textContent=on?'show':'hide'}})</script>";
+}
+export async function contactsBody(env, key, rk, tag, toastJs) {
+  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : ""), ix = await getJ(env, "camp_contact_index", []), imps = await getJ(env, "camp_imports", []), list = [], tags = {};
+  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (!k) continue; (k.tags || []).forEach((t) => (tags[t] = (tags[t] || 0) + 1)); if (tag && !(k.tags || []).includes(tag)) continue; list.push(Object.assign({ d }, k)); }
+  const impOf = (k) => { const id = k.consent && k.consent.import_id; const im = imps.find((x) => x.id === id); return id ? "import " + (im ? im.at.slice(0, 10) : id) : (k.source || "added by hand"); };
+  const live = list.filter((k) => !k.removed), gone = list.filter((k) => k.removed);
+  const card = (k) => "<div class='ar" + (k.removed ? " x" : "") + "' data-d='" + esc(k.d) + "'><b>" + esc(k.name || "(no name)") + (k.company ? " · " + esc(k.company) : "") + "</b>"
+    + "<span class=n><span class=num data-full='" + esc("+" + DIG(k.e164 || k.d)) + "' data-mask='" + esc(audMask(k.e164 || k.d)) + "'>" + esc(audMask(k.e164 || k.d)) + "</span><button type=button class=shw>show</button></span>"
+    + "<div class=chips>" + (k.tags || []).map((t) => "<span class=chp>" + esc(t) + "</span>").join("") + (k.opted_out ? "<span class='chp no'>Opted out</span>" : "") + (k.undeliverable ? "<span class='chp no'>Undeliverable</span>" : "") + "</div>"
+    + "<span class=m>" + esc(impOf(k)) + (k.consent && k.consent.date ? " · consent " + esc(k.consent.date) : " · no consent") + "</span>"
+    + (k.removed ? "<button type=button class=rst style='align-self:flex-start;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:8px;padding:4px 10px;font-weight:600'>Bring back</button>" : "<button type=button class=rmv style='align-self:flex-start;border:0;background:none;color:#5F6B66;text-decoration:underline;padding:2px 0;font-size:.78rem'>Remove</button>") + "</div>";
+  return navTop(q, "/momo/campaigns" + q, "Campaigns") + "<div class=tag>CAMPAIGNS · OWNER ONLY</div><h1>Contacts</h1>" + AUD_CSS
+    + "<div class=ag><div class=agc><b>" + ix.length + "</b><i>Contacts</i></div><div class=agc><b>" + Object.keys(tags).length + "</b><i>Tags</i></div></div>"
+    + "<div class=ft><a href='/momo/campaigns/contacts" + q + "'" + (tag ? "" : " class=on") + ">All</a>" + Object.keys(tags).sort().map((t) => "<a href='/momo/campaigns/contacts" + q + "&tag=" + encodeURIComponent(t) + "'" + (t === tag ? " class=on" : "") + ">" + esc(t) + " (" + tags[t] + ")</a>").join("") + "</div>"
+    + live.map(card).join("") + (gone.length ? "<details><summary class=m>Removed (" + gone.length + ")</summary>" + gone.map(card).join("") + "</details>" : "")
+    + "<script>" + (toastJs || "") + "</script><script>(function(){document.querySelectorAll('.shw').forEach(function(b){b.onclick=function(){var s=b.previousSibling,on=s.textContent===s.getAttribute('data-full');s.textContent=on?s.getAttribute('data-mask'):s.getAttribute('data-full');b.textContent=on?'show':'hide'}});"
+    + "function api(b){return fetch('/momo/campaigns/api'+location.search.replace(/&tag=[^&]*/,''),{method:'POST',headers:{'Content-Type':'application/json','X-Momo-Confirm':'page'},body:JSON.stringify(b)}).then(function(r){return r.json()})}"
+    + "document.querySelectorAll('.rmv').forEach(function(b){b.onclick=function(){var c=b.closest('.ar'),d=c.getAttribute('data-d'),nm=c.querySelector('b').textContent;api({action:'contact_remove',d:d}).then(function(j){if(!j||!j.ok){momoToast('Not saved: '+((j&&j.error)||'no connection'),{error:true});return}c.style.display='none';momoToast('Removed: '+nm,{ms:5000,undo:function(){api({action:'contact_restore',d:d}).then(function(k){if(k&&k.ok){c.style.display='';momoToast('Back in contacts: '+nm)}})}})})}});"
+    + "document.querySelectorAll('.rst').forEach(function(b){b.onclick=function(){var c=b.closest('.ar');api({action:'contact_restore',d:c.getAttribute('data-d')}).then(function(j){if(j&&j.ok){momoToast('Back in contacts');setTimeout(function(){location.reload()},900)}})}})})()</script>";
 }
