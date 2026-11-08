@@ -14,6 +14,7 @@ import { readSpk } from "./work_speaking.js";
 import { readGgu } from "./work_ggu.js";
 import { plannerBridgeGet, plannerBridgePost } from "./content_planner.js";
 import { pendingList, pendingDone } from "./meeting_sync.js";   // v764 - sheet edits queued by meeting Sync   // v758 - FN Content Planner through the bridge
+import { huddleBridge } from "./huddle.js";   // v810 - the Monday Huddle card (Najjuko only; the bridge can never set Approved)
 import { readSheetsIndex, sheetsFor, sheetOut, bridgeSheetUpload, bridgeSheetDelete, bridgeSheetPair } from "./work_sheets.js";   // v675 - Product data sheets through the bridge
 
 export const BRIDGE_BASE = "/momo/bridge/v1/";
@@ -26,6 +27,7 @@ const ROUTES = {   // route -> [method, who may call it]
   "post:entry": ["POST", PEOPLE], "post:task": ["POST", PEOPLE], "post:plan-item": ["POST", PEOPLE], "post:note": ["POST", PEOPLE],
   // v675 - Product data sheets (the shared pds_* store, not a person's Work keys): the loaded sheets plus the caller's own uploads
   "planner/items": ["GET", PEOPLE], "planner/report": ["GET", PEOPLE], "post:planner/item": ["POST", ["najjuko"]], "post:planner/tick": ["POST", ["najjuko"]], "planner/pending": ["GET", PEOPLE], "post:planner/pending/done": ["POST", ["najjuko"]],   // v758
+  "huddle/next": ["GET", ["najjuko"]], "huddle/{date}": ["GET", ["najjuko"]], "put:huddle/{date}/form": ["PUT", ["najjuko"]], "post:huddle/{date}/build": ["POST", ["najjuko"]],   // v810
   sheets: ["GET", PEOPLE], "post:sheet": ["POST", PEOPLE], "post:sheet/delete": ["POST", PEOPLE], "post:sheet/pair": ["POST", PEOPLE],   // v676 - an infographic joins its brief
 };
 
@@ -114,7 +116,7 @@ async function doGet(env, url, person, route) {
   if (route === "planner/pending") return OK({ pending: await pendingList(env) });   // v764
   if (route.startsWith("planner/")) { const r = await plannerBridgeGet(env, url, route); if (r) return J(r); }   // v758
   if (WORK_ROUTES.has(route)) env = await workSide(env, person);
-  if (route === "whoami") return OK({ person, routes: Object.keys(ROUTES).filter((r) => ROUTES[r][1].includes(person)).map((r) => (ROUTES[r][0] + " " + BRIDGE_BASE + r.replace(/^post:/, ""))), limits: { per_minute: RATE_PER_MIN, max_span_days: MAX_SPAN_DAYS } });
+  if (route === "whoami") return OK({ person, routes: Object.keys(ROUTES).filter((r) => ROUTES[r][1].includes(person)).map((r) => (ROUTES[r][0] + " " + BRIDGE_BASE + r.replace(/^(post|put):/, ""))), limits: { per_minute: RATE_PER_MIN, max_span_days: MAX_SPAN_DAYS } });
   if (route === "entries") {
     const sp = span(url, 7); if (!sp) return ERR("span_too_long", "Ask for at most " + MAX_SPAN_DAYS + " days at a time.", 400);
     const es = await L.listEntries(env, sp[0], sp[1]);
@@ -218,22 +220,25 @@ export async function bridgeRoute(request, env, url) {
   if (url.searchParams.has("key") || url.searchParams.has("token")) return ERR("key_in_url", "The bridge key goes in the Authorization header, never in the address.", 400);
   const person = bridgePerson(env, request);
   if (!person) return ERR("unauthorized", "Send Authorization: Bearer <your bridge key>.", 401);
-  const route = method === "POST" ? "post:" + name : name, spec = ROUTES[route];
+  // v810 - the huddle routes carry the Monday's date in the path: matched to one route each, so the key, rate and Idempotency-Key rules stay the same
+  const hm = /^huddle\/(next|\d{4}-\d{2}-\d{2})(\/(form|build))?$/.exec(name);
+  const hroute = hm ? (hm[1] === "next" ? (hm[2] ? "" : "huddle/next") : !hm[3] ? "huddle/{date}" : hm[3] === "form" ? "put:huddle/{date}/form" : "post:huddle/{date}/build") : "";
+  const route = hm ? hroute || "huddle/?" : method === "POST" ? "post:" + name : method === "PUT" ? "put:" + name : name, spec = ROUTES[route];
   if (!(await rateOk(env, person))) { await logCall(env, person, route, 429); return ERR("rate_limited", "Slow down: " + RATE_PER_MIN + " requests a minute.", 429); }
   let res;
   if (!spec || spec[0] !== method) res = ERR("not_found", "Unknown route.", 404);
   else if (!spec[1].includes(person)) res = ERR("forbidden", "This key does not open that.", 403);
-  else if (method === "GET") res = await doGet(env, url, person, route);
+  else if (method === "GET") res = hm ? (([s, o]) => J(o, s))(await huddleBridge(env, "GET", name, null)) : await doGet(env, url, person, route);
   else {
     const ik = String(request.headers.get("Idempotency-Key") || "").trim();
-    if (ik.length < 8 || ik.length > 200) res = ERR("idempotency_key", "Every POST needs an Idempotency-Key header (8-200 characters, new for each new write).", 400);
+    if (ik.length < 8 || ik.length > 200) res = ERR("idempotency_key", "Every POST and PUT needs an Idempotency-Key header (8-200 characters, new for each new write).", 400);
     else {
-      const h = await sha(route + "|" + ik), seen = await idemGet(env, person, h);
+      const h = await sha((hm ? method + ":" + name : route) + "|" + ik), seen = await idemGet(env, person, h);
       if (seen) { res = new Response(JSON.stringify(seen.body), { status: seen.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Idempotent-Replay": "true" } }); }
       else {
         const b = await readJson(request);
         if (!b) res = ERR("bad_json", "Send a JSON body.", 400);
-        else { const [s, body] = await doPost(env, b, person, route, url.origin); if (s < 500) await idemPut(env, person, h, s, body); res = J(body, s); }
+        else { const [s, body] = hm ? await huddleBridge(env, method, name, b) : await doPost(env, b, person, route, url.origin); if (s < 500) await idemPut(env, person, h, s, body); res = J(body, s); }
       }
     }
   }
