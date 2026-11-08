@@ -67,12 +67,17 @@ ok(camp.includes("not a new launch"), "a campaign sighting of a selling project 
 
 // ---- 4. sort order follows launch_date
 const all = selectLaunches(t, {}, TODAY).map((r) => r.project);
-eq(all, ["Kore", "Binghatti Skyterraces", "Raw District 2", "Raw District", "Old Imtiaz Tower"], "newest launch_date first, never first_seen");
-ok(all.indexOf("Kore") < all.indexOf("Raw District 2"), "Kore ranks above Raw District 2 (and its Tower C)");
+eq(all, ["Binghatti Skyterraces", "Raw District 2", "Raw District", "Old Imtiaz Tower", "Kore"], "v811b: LAUNCHED first, newest launch_date first (never first_seen); Coming soon after");
 eq(selectLaunches(t, { tab: "hot" }, TODAY).map((r) => r.project), ["Raw District 2", "Binghatti Skyterraces", "Raw District"], "Hot this month by register sales, last 30 days");
 eq(selectLaunches(t, { tab: "soon" }, TODAY).map((r) => r.project), ["Kore"], "Coming soon");
 const far = selectLaunches([...t, row({ key: "ap_f1", project: "Far Tower", area: "JVC", launch_date: "2027-09-30", launch_basis_kind: "register_start", sales_n: 0 })], {}, TODAY).map((r) => r.project);
-ok(far.indexOf("Far Tower") > far.indexOf("Old Imtiaz Tower") && far[0] === "Kore", "a 2027 register start is not a launch yet: after the dated ones; a start within 30 days leads");
+ok(far.indexOf("Far Tower") === far.indexOf("Kore") + 1, "Coming soon after the launched ones, soonest first");
+const ann = selectLaunches([...t, row({ key: "ap_n1", project: "Announced Only", area: "JVC", registered: false, launch_date: "2026-11-07", launch_basis_kind: "first_seen", sales_n: 0 })], {}, TODAY).map((r) => r.project);
+eq(ann[ann.length - 1], "Announced Only", "announced, no date: at the bottom");
+eq(launchStatus({ registered: false, launch_date: "2026-11-07", launch_basis_kind: "first_seen" }, TODAY).label, "Announced · no date yet", "no register start, no press date: not Coming soon");
+eq(launchSay({ registered: false, launch_date: "2026-11-07", launch_basis_kind: "first_seen" }, TODAY), "No launch date yet", "and no date on the card");
+eq(statusSay({ registered: true, sales_n: 0, planned_units: 80, launch_date: "2026-07-15", launch_basis_kind: "news" }, TODAY), "Registered · no sales yet", "Elinor: on the register 4 months, 0 sales: not Selling");
+eq(launchSay(Object.assign({}, rd2[0], { sales_as_of: "2026-10-15" }), TODAY), "Launched 13 Aug 2026 · 448 sold to 15 Oct", "a sales count carries the register date");
 eq(selectLaunches(t, { tab: "week" }, TODAY).length, 0, "nothing launched this week (Raw District 2's 7 Nov tower row does not make it new)");
 
 // ---- 5. Area filter
@@ -81,7 +86,7 @@ eq(selectLaunches(t, { area: "wadi al safa 5" }, TODAY).map((r) => r.project), [
 ok(areaOptions(t).includes("Jebel Ali Industrial 2") && areaOptions(t).includes("Wadi Al Safa 5"), "the districts in the data are offered");
 
 // ---- 6. Imtiaz, last 4 months
-eq(selectLaunches(t, { dev: "imtiaz", days: 122 }, TODAY).map((r) => r.project), ["Kore", "Raw District 2", "Raw District"], "Imtiaz last 4 months: Kore (coming), Raw District 2, Raw District; not a 2025 project, not Binghatti");
+eq(selectLaunches(t, { dev: "imtiaz", days: 122 }, TODAY).map((r) => r.project), ["Raw District 2", "Raw District", "Kore"], "Imtiaz last 4 months: Kore (coming), Raw District 2, Raw District; not a 2025 project, not Binghatti");
 eq(selectLaunches(t, { dev: "imtiaz", from: "2026-08-01", to: "2026-11-08" }, TODAY).map((r) => r.project), ["Raw District 2"], "a custom range on launch_date");
 
 // ---- 7. the page
@@ -89,7 +94,9 @@ const page = launchesPage("k", "", tidyLaunches(snap), TODAY);
 ok(page.includes("for=zn>Area<") && !page.includes(">Dubai 2040 zone<"), "the filter says Area, the 2040 zone is off it");
 ok(page.includes("data-f=hot>Hot this month") && page.includes("data-f=soon>Coming soon"), "Hot this month and Coming soon tabs");
 ok(page.includes('data-r=122>Last 4 months'), "launch-date range presets");
-ok(page.indexOf('data-project="Kore"') < page.indexOf('data-project="Raw District 2"'), "the page is served in launch_date order");
+ok(page.indexOf('data-project="Raw District 2"') < page.indexOf('data-project="Kore"'), "the page is served launched-first, in launch_date order");
+const page2 = launchesPage("k", "", Object.assign(tidyLaunches(snap), { sales_as_of: "2026-10-15" }), TODAY);
+ok(page2.includes("Off-plan sales in the last 30 days · Register sales to 15 Oct"), "Hot this month says how far the register runs");
 ok(/data-launch=/.test(page) && /f=c\.getAttribute\("data-launch"\)/.test(page), "Make a report periods use launch_date");
 const card = fs.readFileSync(new URL("../src/launches_card.js", import.meta.url), "utf8"), rep = fs.readFileSync(new URL("../src/launch_report.js", import.meta.url), "utf8");
 ok(!/first seen " \+ dSay/.test(rep) && /\["note", "Launch", launchSay/.test(rep), "the report shows the launch date and status, not first seen");

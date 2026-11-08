@@ -126,7 +126,7 @@ function combine(rs) {
   c.merged_keys = [...new Set([...(c.merged_keys || []), ...rs.map((r) => r.key)])];
   return c;
 }
-export const STATUS_LABEL = { eoi: "EOI / allocation pending", coming_soon: "Coming soon", nearly_sold_out: "Nearly sold out", just_launched: "Just launched", selling: "Selling" };
+export const STATUS_LABEL = { eoi: "EOI / allocation pending", coming_soon: "Coming soon", nearly_sold_out: "Nearly sold out", just_launched: "Just launched", selling: "Selling", no_sales: "Registered · no sales yet", announced: "Announced · no date yet" };
 // the same rules as launch_truth.status_of: EOI first (0 register sales is not unsold), then nothing selling, nearly sold out, just launched, selling
 export function launchStatus(r, today) {
   const sold = Number(r.sales_n) || 0, planned = Number(r.planned_units) || 0;
@@ -135,17 +135,23 @@ export function launchStatus(r, today) {
   const eoi = !!(r.eoi_note || r.status === "eoi" || r.eoi);
   let st;
   if (eoi && sold < Math.max(20, 0.05 * planned)) st = "eoi";
-  else if (!sold) st = (!r.registered || (sd && sd > today) || !ld || ld > today) ? "coming_soon" : (dd(ld) <= 30 ? "just_launched" : "selling");
+  else if (!sold) {   // v811b (Kendall 8 Nov): Coming soon only with a real future register start or news-stated date
+    const dated = ["register_sale", "news", "register_start"].includes(r.launch_basis_kind);
+    st = (!dated || !ld) ? "announced" : ld > today ? "coming_soon" : dd(ld) <= 30 ? "just_launched" : "no_sales";
+  }
   else if (pct !== null && pct >= 85) st = "nearly_sold_out";
   else if (ld && dd(ld) >= 0 && dd(ld) <= 30) st = "just_launched";
   else st = "selling";
-  return { status: st, label: STATUS_LABEL[st], pct };
+  return { status: st, label: st === "no_sales" && !r.registered ? "Launched · not on the register yet" : STATUS_LABEL[st], pct };
 }
+// v811b: every register sales count carries the date the register runs to ("448 sold to 15 Oct")
+export const salesTo = (r) => { const m = String((r && r.sales_as_of) || "").match(/^\d{4}-(\d{2})-(\d{2})/); return m ? " to " + Number(m[2]) + " " + MON[Number(m[1]) - 1] : ""; };
 // "Launched 13 Aug 2026 · 448 sold", "Launched 2 Feb 2026 (Khaleej Times)", "Register start 15 Nov 2026", "Launch date unknown"
 export function launchSay(r, today) {
   const d = dSay(r.launch_date), k = r.launch_basis_kind || "";
   if (!d) return "Launch date unknown";
-  const sold = Number(r.sales_n) || 0, sl = sold ? " · " + nf(sold) + " sold" : "";
+  const sold = Number(r.sales_n) || 0, sl = sold ? " · " + nf(sold) + " sold" + salesTo(r) : "";
+  if (launchStatus(r, today || "9999").status === "announced") return "No launch date yet";
   if (today && r.launch_date > today) return (k === "register_start" ? "Register start " : "Launches ") + d;
   if (k === "news") return "Launched " + d + (r.launch_source ? " (" + r.launch_source + ")" : "") + sl;
   if (k === "register_sale") return "Launched " + d + sl;
@@ -154,7 +160,7 @@ export function launchSay(r, today) {
 }
 export function statusSay(r, today) {
   const s = launchStatus(r, today);
-  return s.label + ((s.status === "selling" || s.status === "nearly_sold_out") && s.pct !== null ? " · " + s.pct.toFixed(0) + "% sold" : "");
+  return s.label + ((s.status === "selling" || s.status === "nearly_sold_out") && s.pct !== null ? " · " + s.pct.toFixed(0) + "% sold" + salesTo(r) : "");
 }
 export const safePic = (u) => /\/img\/l(?:pic|thumb)_[\w-]+$/.test(String(u || ""));   // our own face-checked copies only
 const NAVY = "#1F2B44", GOLD = "#C5A56A", CREAM = "#FAF6EE", INK = "#202020", MUTE = "#5F6B66", PALE = "#EEE7D8";
