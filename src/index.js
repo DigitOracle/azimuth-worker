@@ -5,7 +5,8 @@ import { tripRoute, TRIP_ICON } from "./trip_card.js";
 import { todayFullRoute } from "./today_full.js";
 import { calStart, calCallback } from "./today_cal.js";   // v786b   // v786 - the full Today card   // v785 - the shared Thailand trip card (Kendall + Najjuko)   // v778
 import { calendarRoute } from "./content_calendar.js";   // v754
-import { launchesRoute, LAUNCH_ICONS } from "./launches_card.js";   // v799 - Momo New launches
+import { launchesRoute, LAUNCH_ICONS } from "./launches_card.js";
+import { radarAlertRoute } from "./radar_alert.js";   // v825 - Launch Radar desk alerts   // v799 - Momo New launches
 import { makeReportRoute, publicReportRoute, tidyLaunches } from "./launch_report.js";   // v800 - the Najma Launch Report on demand, PDF and WhatsApp share
 import { huddleRoute, huddleTick, HUDDLE_ICON } from "./huddle.js";
 import { navGuard } from "./nav_guard.js";   // v812
@@ -3824,6 +3825,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/ig/deauth" || url.pathname === "/ig/delete") return igRoute(env, url, request);   // v149 - Meta's deauthorise / data-deletion callbacks
       if (url.pathname === "/ingest_private") return ingestPrivate(env, request);   // v152 - private datasets: never under img_, never served by /img
       if (url.pathname === "/send_request") return sendRequest(env, request);   // v155 - request only; the owner approves on WhatsApp
+      if (url.pathname === "/radar_alert") return radarAlertRoute(request, env, { ctEq, waSend, tellOwner: gcTellOwner });   // v825 - Launch Radar desk alerts (3 a day, 09:00-19:00)
       if (url.pathname === "/approved_send") {                 // v155 - the recipient's instance delivers an owner-approved message
         if (env.OWNER_TEMPLATE) return new Response("recipient instance only", { status: 403 });
         const _ah = request.headers.get("X-Azimuth-Forward");
