@@ -72,7 +72,7 @@ export async function followupGroups(env, c, now) {
     if (m.read || s.read || m.st === "read") p.read = true;
     if (m.st === "failed" || s.failed) p.failed = true;
     if (m.replied) p.replied = true; if (m.tap) p.tap = typeof m.tap === "string" ? m.tap : p.tap || "tapped";
-    if (m.optout) p.optout = true;
+    if (m.optout) p.optout = true; if (m.optin) p.optin = true;   // v821 - they messaged first (wa.me opt-in)
     const at = String(s.read || s.delivered || m.at || ""); if (at > p.at) p.at = at;
   }
   const groups = { started: [], opened: [], delivered: [], completed: [] }, removed = [];
@@ -84,7 +84,7 @@ export async function followupGroups(env, c, now) {
     if (pr.optout) { optout++; continue; }
     let g = "";
     if (hoD.has(d) || (pr.started && pr.terminal)) g = "completed";
-    else if (pr.started || p.replied || p.tap) g = "started";
+    else if (pr.started || p.replied || p.tap || p.optin) g = "started";   // v821 - an opt-in owner wrote to us first: warm even before a tap
     else if (p.read) g = "opened";
     else if (p.delivered) g = "delivered";
     else { notDelivered++; continue; }

@@ -96,5 +96,12 @@ ok(r.status === 200 && calls.length === 2 && calls.every((x) => x.body.to === "9
 // 11. no header picture stored: the question still goes
 store.delete("img_tplhdr_naj_pja_intro"); calls.length = 0; await hook(ev("971500000051", "Palm Jebel Ali")); ok(calls.length === 1 && calls[0].body.type === "interactive", "no picture in KV: text + options only");
 
+// 12. v819 follow-up groups: pja-optin shows, opt-in owners are "started" (warm), opted-out only counted
+const FU = await import("../src/camp_followup.js");
+const G = await FU.followupGroups(env, J("camp_pja-optin"), T);
+const allD = Object.values(G.groups).flat().map((r) => r.d);
+ok(G.groups.started.some((r) => r.d === "971500000041") && G.groups.started.some((r) => r.d === "971500000042") && !allD.includes("971500000043") && G.counts.optout >= 1, "v819 groups: opt-ins are started, the STOP is a count only", G.counts);
+ok(FU.campTopic(J("camp_pja-optin")) === "Palm Jebel Ali", "suggested-message topic reads Palm Jebel Ali", FU.campTopic(J("camp_pja-optin")));
+
 console.log("test_v821_optin: " + pass + " passed, " + fail + " failed");
 if (fail) process.exit(1);
