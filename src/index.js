@@ -38,6 +38,7 @@ import { SCHED_SCHEMA, SCHED_TTL, SCHED_MSG, schedPrompt, schedSanitise, schedCa
 import { NS_SETS, nsPartView, nsFindRow } from "./ask_sets.js";   // v370 - questionnaire sets for the dropdown engine
 import { deskRegRoutes } from "./wa_desk_reg.js";   // v409 - owner-only /wa_desk_status and /wa_desk_register
 import { plotPassportRoutes } from "./plot_passport.js";   // Plot Passport (More), 2 Nov 2026
+import { decideCardHtml, decideFacts, DECIDE_CSS } from "./decide_card.js";   // v827 decide card: service charge + net yield
 import { briefChatRoute, briefChatNajOn } from "./brief_chat.js";   // v455 - the client brief as a chat; Naj only when switched on
 import { deskReelTick } from "./desk_lab.js";
 import { clipTick } from "./heygen.js";   // v476
@@ -2155,6 +2156,13 @@ async function appFetch(request, env, ctx) {
     if (_sh) return _sh;
     // ---- THE BRIEF (part B, 30 Sep 2026): GET /brief - the form, the ranked list and the output buttons. All logic in src/brief_page.js. ----
     // After the client gate (/brief is in CLIENT_PATHS); briefRoutes applies clientOk itself. Returns null for any other path.
+    if (url.pathname === "/plot_passport/decide" && keyTier(env, url) === "admin") {   // v827: the decide card on its own; mounted inside the Plot Passport once v826 (plot_passport.js) lands
+      const _id = String(url.searchParams.get("id") || "").replace(/^naj:plot:/, "");
+      if (!/^[A-Za-z0-9\-]{1,40}$/.test(_id)) return new Response("bad id", { status: 400 });
+      let _pk = null; try { const _v = await env.MEETINGS.get("pp_pack_" + _id); _pk = _v ? JSON.parse(_v) : null; } catch (e) {}
+      if (url.searchParams.get("json") === "1") return new Response(JSON.stringify(decideFacts(_pk)), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      return new Response('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:12px;background:#F6F0E4;font-family:Inter,system-ui,sans-serif}' + DECIDE_CSS + "</style></head><body>" + decideCardHtml(_pk) + "</body></html>", { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+    }
     if ((url.pathname === "/plot_passport" || url.pathname.indexOf("/plot_passport/") === 0) && keyTier(env, url) === "admin") { const _pp = await plotPassportRoutes(request, env, url, { clientOk, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_pp) return _pp; }   // Plot Passport
     if (url.pathname === "/brief") { const _br = await briefRoutes(request, env, url, { clientOk, keyTier, clientLinkKey, clientResp, residentsKeyOf, najNav, NAJ_NAV_CSS, NAJ_FONTS }); if (_br) return _br; }
     // ---- end THE BRIEF ----
