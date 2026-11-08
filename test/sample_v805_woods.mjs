@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { reportHtml, tidyLaunches, pickRows, addMaps } from "../src/launch_report.js";
 const [L, D, N, LOGO, OUT] = process.argv.slice(2);
 const snap = tidyLaunches(JSON.parse(readFileSync(L, "utf8"))), rep = JSON.parse(readFileSync(D, "utf8")), dna = JSON.parse(readFileSync(N, "utf8"));
-const row = snap.rows.find((r) => r.project === "The Woods");
+const row = snap.rows.find((r) => r.project === (process.env.LR_PROJECT || "The Woods"));
 const rows = pickRows(snap.rows, [row.key]), data = rep.rows;
 const e = data[row.key];
 if (!e.lat) {   // the 04:00 job will carry e.lat/e.lon; for this sample, back-solve the pin from the Burj Khalifa mark (km + bearing)

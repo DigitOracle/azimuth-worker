@@ -111,6 +111,15 @@ export async function addMaps(rows, data) {
   }));
 }
 
+// v805e (Kendall 8 Nov: "not sure the dots for the Metro Mall supermarket are quite clear ... use little icons on the bigger map"):
+// each amenity is a coloured round badge with a white line icon (train, shopping bag, basket, school cap), with a white halo.
+const PIN_G = {
+  m: '<rect x="7" y="4" width="10" height="12" rx="2.5"/><path d="M7 11h10M9.5 19l-1.5 2M14.5 19l1.5 2"/><circle cx="9.5" cy="14" r=".6"/><circle cx="14.5" cy="14" r=".6"/>',
+  l: '<path d="M6 8h12l-1 12H7z"/><path d="M9.5 8V6.5a2.5 2.5 0 0 1 5 0V8"/>',
+  s: '<path d="M4 6h2.5l2 9h8.5l1.5-6.5H8"/><circle cx="10" cy="18.5" r="1.3"/><circle cx="16" cy="18.5" r="1.3"/>',
+  c: '<path d="M3 9.5L12 5l9 4.5-9 4.5z"/><path d="M7 11.5v4c0 1.5 2.5 2.5 5 2.5s5-1 5-2.5v-4"/>',
+};
+const pinBadge = (k, x, y, r, col) => '<g transform="translate(' + x.toFixed(1) + " " + y.toFixed(1) + ')"><circle r="' + (r + 2) + '" fill="#fff"/><circle r="' + r + '" fill="' + col + '"/><g transform="translate(' + (-r * 0.72) + " " + (-r * 0.72) + ") scale(" + (r * 1.44 / 24).toFixed(3) + ')" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + PIN_G[k] + "</g></g>";
 export function mapSvg(e) {
   const W = 500, H = 290, cx = W / 2, cy = H / 2, M = e && e._map, sc = M ? (W / 2) / MAP_R : (H / 2 - 6) / 3.2;
   if (!e || !e.pin_basis) return '<div class=nomap>No map point for this launch yet.</div>';
@@ -121,8 +130,7 @@ export function mapSvg(e) {
   for (const p of (e.pts || [])) {
     const x = cx + p[1] * sc, y = cy - p[2] * sc; if (x < 8 || x > W - 8 || y < 8 || y > H - 8) continue;
     const c = col[p[0]] || MUTE;
-    o += p[0] === "m" ? '<rect x="' + (x - 5).toFixed(1) + '" y="' + (y - 5).toFixed(1) + '" width="10" height="10" fill="' + c + '"/>'
-      : p[0] === "c" ? '<path d="M' + x.toFixed(1) + " " + (y - 6).toFixed(1) + "l-6 11h12z" + '" fill="' + c + '"/>' : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (p[0] === "l" ? 5 : 3.5) + '" fill="' + c + '"/>';
+    o += PIN_G[p[0]] ? pinBadge(p[0], x, y, 9, c) : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4" fill="' + c + '"/>';
   }
   for (const m of (e.marks || [])) {
     if (m.km <= (M ? MAP_R : 3.2)) continue;
@@ -145,9 +153,9 @@ export function mapSvg(e) {
   o += '<circle cx="' + cx + '" cy="' + cy + '" r="10" fill="' + GOLD + '" stroke="' + NAVY + '" stroke-width="3"/><circle cx="' + cx + '" cy="' + cy + '" r="3" fill="' + NAVY + '"/>';
   const kx = W - 34, ky = 40;   // compass
   o += '<circle cx="' + kx + '" cy="' + ky + '" r="19" fill="#fff" stroke="' + NAVY + '" stroke-width="2"/><path d="M' + kx + " " + (ky - 15) + "l-6 15 6-4 6 4z" + '" fill="' + NAVY + '"/><path d="M' + kx + " " + (ky + 15) + "l-6-15 6 4 6-4z" + '" fill="#fff" stroke="' + NAVY + '"/><text x="' + kx + '" y="' + (ky - 23) + '" font-size="13" font-weight="700" text-anchor="middle" fill="' + NAVY + '">N</text>';
-  const leg = [["m", "metro"], ["l", "mall"], ["s", "supermarket"], ["c", "school"]]; let lx = 14;
-  o += '<rect x="6" y="' + (H - 24) + '" width="292" height="18" rx="5" fill="#F6F1E6"/>';
-  for (const [k, t] of leg) { o += (k === "m" ? '<rect x="' + lx + '" y="' + (H - 19) + '" width="9" height="9" fill="' + col[k] + '"/>' : k === "c" ? '<path d="M' + (lx + 5) + " " + (H - 20) + "l-5 10h10z" + '" fill="' + col[k] + '"/>' : '<circle cx="' + (lx + 4.5) + '" cy="' + (H - 14.5) + '" r="4.5" fill="' + col[k] + '"/>') + '<text x="' + (lx + 13) + '" y="' + (H - 10) + '" font-size="11" fill="' + MUTE + '">' + t + "</text>"; lx += 22 + t.length * 6.2; }
+  const leg = [["m", "metro"], ["l", "mall"], ["s", "supermarket"], ["c", "school"]]; let lx = 16;
+  o += '<rect x="6" y="' + (H - 26) + '" width="300" height="22" rx="6" fill="#fff" fill-opacity=".92"/>';
+  for (const [k, t] of leg) { o += pinBadge(k, lx, H - 15, 7, col[k]) + '<text x="' + (lx + 11) + '" y="' + (H - 11) + '" font-size="11" fill="' + INK + '">' + t + "</text>"; lx += 24 + t.length * 6.2; }
   return o + "</svg>";
 }
 
