@@ -89,6 +89,7 @@ const deps = { isNaj: () => true, isAny: () => true, person: () => "najjuko", pa
 const post = (path, body) => { const u = new URL("https://x" + path + "?key=ins_najjuko_TESTKEY"); return workRoute(new Request(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), env, u, deps).then((x) => x.json()); };
 const get = (path) => { const u = new URL("https://x" + path + (path.includes("?") ? "&" : "?") + "key=ins_najjuko_TESTKEY"); return workRoute(new Request(u), env, u, deps); };
 let d1 = mrec.draft_tasks[0].id, d2 = mrec.draft_tasks[1].id;
+j = await post("/momo/work/api", { action: "draft_task", id: mrec.id, did: d1, op: "save", start: "2026-12-01" });   // v814: both dates before Add
 j = await post("/momo/work/api", { action: "draft_task", id: mrec.id, did: d1, op: "add" });
 const task = JSON.parse(store.m.get([...store.m.keys()].find((k) => k.startsWith("work_naj_task_") && /brochure/.test(k))));
 ok(j.ok && task.quick && task.owners[0] === A && task.due === "2026-12-02" && task.name === "Send the brochure", "Add makes a real task in the same store and shape as a quick task");

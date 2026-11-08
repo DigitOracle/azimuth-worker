@@ -27,7 +27,7 @@ function show() {
     + '<button type="button" id="qt_rec" style="width:100%;margin-top:10px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #C5A56A;border-radius:12px;background:#FAF7F1;color:#0A4F4A;font:600 .95rem IBM Plex Sans,sans-serif;cursor:pointer"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Record a meeting instead</button>'
     + '<div id="qt_hint" style="font:500 .78rem IBM Plex Sans,sans-serif;color:#5F6B66;min-height:1.1em;margin-top:4px"></div>'
     + '<label style="' + LB + '" for="qt_who">WHO IS IT FOR</label><select id="qt_who" style="' + IN + '"><option value="">Me</option></select>'
-    + '<label style="' + LB + '" for="qt_due">DUE (IF THERE IS A DATE)</label><input id="qt_due" type="date" style="' + IN + '">'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label style="' + LB + '" for="qt_start">START</label><input id="qt_start" type="date" style="' + IN + '"></div><div><label style="' + LB + '" for="qt_due">DUE</label><input id="qt_due" type="date" style="' + IN + '"></div></div><p style="font:500 .78rem IBM Plex Sans,sans-serif;color:#5F6B66;margin:4px 0 0">Start with a verb and say for whom: "Create the footprint plan for Sultan".</p>'
     + '<div style="display:flex;gap:8px;margin-top:16px"><button type="button" id="qt_save" style="flex:1;min-height:46px;border:0;border-radius:12px;background:#0A4F4A;color:#FFFDF9;font:600 1rem IBM Plex Sans,sans-serif;cursor:pointer">Add task</button>'
     + '<button type="button" id="qt_x" style="min-height:46px;border:1px solid #D8D1C4;border-radius:12px;background:#FAF7F1;color:#1C2826;font:600 1rem IBM Plex Sans,sans-serif;padding:0 16px;cursor:pointer">Cancel</button></div></div>';
   document.body.appendChild(o); open = o;
@@ -55,7 +55,9 @@ function show() {
   S.onclick = function () {
     var text = (T.value || "").replace(/\s+/g, " ").trim(); if (text.length < 3) { H.textContent = "Type or say the task first."; T.focus(); return; }
     stop(); S.disabled = true; S.textContent = "Adding...";
-    api({ action: "task_quick", text: text, who: W.value, due: o.querySelector("#qt_due").value }).then(function (j) {
+    var qs = o.querySelector("#qt_start"), qd = o.querySelector("#qt_due"); if (qs && !qs.value) qs.value = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+    if (!qd.value) { qd.focus(); qd.style.borderColor = "#B4533C"; var er = o.querySelector("#qt_err") || document.createElement("p"); er.id = "qt_err"; er.style.cssText = "color:#B4533C;font:600 .85rem IBM Plex Sans,sans-serif;margin:6px 0 0"; er.textContent = "Add a due date before saving."; qd.parentNode.appendChild(er); return; }   // v814 - a task needs a due date
+    api({ action: "task_quick", text: text, who: W.value, start: qs ? qs.value : "", due: qd.value }).then(function (j) {
       if (!j.ok) { S.disabled = false; S.textContent = "Add task"; H.textContent = j.error || "Not added. Try again."; return; }
       shut(); var d = j.task.name + (j.task.owners && j.task.owners.length ? " · for " + j.task.owners[0] : "") + (j.task.due ? " · due " + j.task.due : "");
       if (window.momoConfirm) window.momoConfirm(true, "Task added", d);

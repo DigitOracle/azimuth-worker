@@ -44,8 +44,9 @@ ok(!/'Fix'|Fix now|QA\/QC fix|No fixes/.test(pg), "no Fix label is left on the p
 const names = ["Vishant Rao", "Sousan"];
 let q = quickTaskRecord({ text: "  Call   the Ellington  rep about the brochure ", who: "Sousan", due: "2026-11-12" }, names, "2026-11-06T09:00:00.000Z", "Najjuko");
 ok(q.rec && q.rec.name === "Call the Ellington rep about the brochure" && q.rec.quick && q.rec.status === "Started" && q.rec.percent === 0 && q.rec.owners[0] === "Sousan" && q.rec.due === "2026-11-12" && q.rec.by === "Najjuko", "a quick task record from typed or spoken words", q.rec);
-ok(quickTaskRecord({ text: " a " }, names, "x", "Najjuko").error && quickTaskRecord({ text: "Book the studio", who: "A stranger", due: "soon" }, names, "2026-11-06T09:00:00Z", "Najjuko").rec.owners.length === 0, "nothing typed is refused; an unknown person and a bad date are dropped");
-const long = quickTaskRecord({ text: "x".repeat(200) }, names, "2026-11-06T09:00:00Z", "Najjuko").rec;
+ok(quickTaskRecord({ text: " a " }, names, "x", "Najjuko").error && quickTaskRecord({ text: "Book the studio", who: "A stranger", due: "2026-11-09" }, names, "2026-11-06T09:00:00Z", "Najjuko").rec.owners.length === 0, "nothing typed is refused; an unknown person is dropped");
+ok(/due date/.test(quickTaskRecord({ text: "Book the studio", due: "soon" }, names, "2026-11-06T09:00:00Z", "Najjuko").error || ""), "v814: a bad or missing due date is refused (a task needs a due date)");
+const long = quickTaskRecord({ text: "x".repeat(200), due: "2026-11-20" }, names, "2026-11-06T09:00:00Z", "Najjuko").rec;
 ok(long.name.length === 80 && long.detail.length === 200, "long words are kept in full behind a short name");
 const entries = [{ date: "2026-11-05", created: "2026-11-05T08:00:00Z", works: ["Brochure refresh"], progress: [{ work: "Brochure refresh", status: "In progress", percent: 40, owners: [] }], effort: "1-2 hours" }];
 let list = applyOverrides(tasksOf(entries), [q.rec]);
