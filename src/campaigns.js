@@ -639,6 +639,20 @@ export async function recount(env, cid) {
 
 // ---------- owner routes ----------
 // v723 (coordinator 3 Nov): the Campaigns card is NAJJUKO's card - her key and Kendall's open it; GOING LIVE stays with the owner (Kendall's key or READ_KEY).
+// ---------- v806 (Kendall 8 Nov 2026): unread badges on the campaign cards ----------
+// "2 new replies" / "3 clicked" on each card, counted since THIS viewer last opened THAT campaign, so Najjuko need not drill down.
+// Counts come from camp_stats_<cid>: replies (first reply or button tap per message, campWebhook) and uclicks (first click per tracked
+// link, linkRoute). KV camp_seen_<viewer>_<cid> = {at, replies, uclicks} is the snapshot taken when the viewer opened the campaign;
+// badge = current - snapshot. viewer is "najjuko" or "kendall" (READ_KEY counts as Kendall). No snapshot yet = everything is new.
+export const seenKey = (viewer, cid) => "camp_seen_" + viewer + "_" + cid;
+export function campViewer(env, url, deps) { const p = deps && typeof deps.person === "function" ? deps.person(env, url) : ""; if (p === "najjuko" || p === "kendall") return p; return isCampOwner(env, url, deps) ? "kendall" : "najjuko"; }
+export function unreadOf(S, seen) { const s = seen || {}, S2 = S || {}; const o = { replies: Math.max(0, (S2.replies || 0) - (s.replies || 0)), clicks: Math.max(0, (S2.uclicks || 0) - (s.uclicks || 0)) }; o.total = o.replies + o.clicks; return o; }
+export async function markSeen(env, viewer, cid, S, now) { await putJ(env, seenKey(viewer, cid), { at: new Date(now || Date.now()).toISOString(), replies: (S && S.replies) || 0, uclicks: (S && S.uclicks) || 0 }); }
+export async function unreadAll(env, viewer) { const out = {}; let total = 0;
+  for (const id of await getJ(env, "camp_index", [])) { const u = unreadOf(await getJ(env, "camp_stats_" + id, {}), await getJ(env, seenKey(viewer, id), null)); out[id] = u; total += u.total; }
+  return { total, campaigns: out }; }
+export function badgeHtml(u) { if (!u || !u.total) return "";
+  return '<span class=ubg>' + (u.replies ? '<span class="ub ur">' + u.replies + (u.replies === 1 ? " new reply" : " new replies") + '</span>' : "") + (u.clicks ? '<span class="ub uc">' + u.clicks + " clicked</span>" : "") + '</span>'; }
 export const isCampViewer = (env, url, deps) => isCampOwner(env, url, deps) || !!(deps && typeof deps.person === "function" && deps.person(env, url) === "najjuko" && (typeof deps.isNaj !== "function" || deps.isNaj(env, url)));
 export const isCampOwner = (env, url, deps) => { const k = url.searchParams.get("key") || ""; if (!k) return false;
   if (deps && typeof deps.person === "function" && deps.person(env, url) === "kendall") return true;
@@ -653,8 +667,10 @@ export async function campaignRoute(request, env, url, deps) {
   const owner = isCampOwner(env, url, deps);
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const now = (deps && deps.now) || Date.now();
+  const viewer = campViewer(env, url, deps);
+  if (p === "/momo/campaigns/unread" && request.method === "GET") return J(Object.assign({ ok: true, viewer }, await unreadAll(env, viewer)));   // v806
   if (p === "/momo/campaigns" && request.method === "GET") {
-    const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner);
+    const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer);
     const html = deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>';
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
@@ -765,7 +781,8 @@ function svgClicks(rows) {
   return '<svg viewBox="0 0 340 ' + (rows.length * rh) + '" width="100%" role="img" aria-label="Clicks per link">' + rows.map(([u, v, p], i) => { const w = Math.max(2, Math.round(v / max * 230)), y0 = i * rh;
     return '<text x="0" y="' + (y0 + 11) + '" font-size="10" fill="' + MUTE + '">' + esc(u.replace(/^https:\/\//, "").slice(0, 46)) + '</text><rect x="0" y="' + (y0 + 15) + '" width="' + w + '" height="13" rx="3" fill="' + GOLD + '"/><text x="' + (w + 4) + '" y="' + (y0 + 26) + '" font-size="10" font-weight="600" fill="' + INK + '">' + v + ' clicks · ' + p + ' people</text>'; }).join("") + '</svg>';
 }
-async function dashBody(env, key, rk, now, want, owner) {
+async function dashBody(env, key, rk, now, want, owner, viewer) {
+  viewer = viewer || (owner ? "kendall" : "najjuko");
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const ids = await getJ(env, "camp_index", []), camps = [];
   for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c) camps.push(c); }
@@ -774,14 +791,17 @@ async function dashBody(env, key, rk, now, want, owner) {
   for (const d of cix.slice(0, 1500)) { const k = await getJ(env, "camp_contact_" + d, null); if (updatesConsent(k) === true) consentN++; }
   const S = cur ? Object.assign(blankStats(), await getJ(env, "camp_stats_" + cur.id, {})) : blankStats(), R = rates(S);
   const head = '<div class=hg>' + [["Contacts", cix.length], ["Sent", S.sent], ["Reply rate", pc(R.replied)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
-  const pick = camps.length > 1 ? '<div class=pk>' + camps.slice().reverse().map((c) => '<a class="pkc' + (cur && c.id === cur.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(c.id) + '">' + esc(c.name || c.id) + '</a>').join("") + '</div>' : "";
+  const unread = {}; for (const c of camps) unread[c.id] = unreadOf(await getJ(env, "camp_stats_" + c.id, {}), await getJ(env, seenKey(viewer, c.id), null));   // v806
+  const pick = camps.length > 1 ? '<div class=pk>' + camps.slice().reverse().map((c) => '<a class="pkc' + (cur && c.id === cur.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(c.id) + '"><span class=pkn>' + esc(c.name || c.id) + '</span>' + (cur && c.id === cur.id ? "" : badgeHtml(unread[c.id])) + '</a>').join("") + '</div>' : "";
   if (!cur) return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + '<div class=empty id=camp_empty>' + ic(CAMP_ICON, 34) + '<p><b>No campaigns yet</b></p><p>Import a consented list, create a campaign, then run a dry run.</p></div>' + DASH_CSS;
   const st = ST[cur.status] || [cur.status, MUTE];
   const btn = (a, lab, cls) => '<button class="cb ' + (cls || "") + '" type=button data-a=' + a + ' data-id="' + esc(cur.id) + '">' + lab + '</button>';
   const acts = [btn("dry", "Dry run")];
   if (cur.status === "live") acts.push(btn("pause", "Pause", "pz"));
   if (["draft", "paused"].includes(cur.status)) acts.push(owner ? btn(cur.status === "paused" ? "resume" : "live", cur.status === "paused" ? "Resume (Kendall)" : "Approve live (Kendall)", "go") : btn("request_live", cur.live_requested ? "Asked Kendall" : "Ask Kendall to go live", "go"));
+  const nu = unread[cur.id]; await markSeen(env, viewer, cur.id, S, now);   // v806 - opening the campaign clears its badge for this viewer
   const top = '<div class=cc id="camp_' + esc(cur.id) + '"><div class=ch><b>' + esc(cur.name || cur.id) + '</b><span class=cs style="background:' + st[1] + '">' + st[0] + '</span></div>'
+    + (nu && nu.total ? '<div class=unw><i>Since you last looked</i>' + badgeHtml(nu) + '</div>' : "")
     + '<p class=cm>' + esc(cur.template) + ' · ' + (cur.phone === "main" ? "main number" : "desk number") + ' · ' + esc(cur.window) + ' Dubai · cap ' + cur.cap + '/day · ' + esc((cur.tags || []).join(", ")) + '</p>'
     + (cur.stopped && cur.stopped.why ? '<p class=cw>Stopped: ' + esc(cur.stopped.why) + '</p>' : "") + (cur.live_requested && cur.status !== "live" ? '<p class=cm>Go-live asked ' + esc(cur.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
     + '<div class=cba>' + acts.join("") + '</div><p class=cr id="res_' + esc(cur.id) + '"></p></div>';
@@ -818,6 +838,8 @@ const DASH_CSS = '<style>.hg{display:grid;grid-template-columns:repeat(2,minmax(
   + '.dn{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.lgs{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}.lgs2{display:flex;gap:12px;margin-top:4px}.lg{font-size:.78rem;color:' + INK + ';display:flex;align-items:center;gap:6px}.lg span{width:10px;height:10px;border-radius:3px;display:inline-block}.lg em{color:' + MUTE + ';font-style:normal}.nd{color:' + MUTE + ';font-size:.85rem;margin:0}'
   + '.srch{width:100%;box-sizing:border-box;border:1px solid ' + LINE + ';border-radius:999px;padding:10px 14px;font:inherit;margin-bottom:10px}.pl{display:flex;flex-direction:column;gap:8px}.pc{border:1px solid ' + LINE + ';border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}.ph{display:flex;justify-content:space-between;gap:8px;align-items:center}.ph b{color:' + TEAL + ';overflow-wrap:anywhere}'
   + '.pst{font:600 .66rem "IBM Plex Mono",monospace;border-radius:999px;padding:2px 8px;border:1px solid ' + GOLD + ';color:#8A6F3E;white-space:nowrap}.s_Optedout,.s_Failed{border-color:' + RED + ';color:' + RED + '}.s_Replied{background:' + TEAL + ';color:#fff;border-color:' + TEAL + '}.pg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font-size:.8rem}.pg i{display:block;font-style:normal;font-size:.66rem;color:#8A6F3E;font-weight:600}.cb.fu{padding:8px}'
+  + '.pkc{display:flex;flex-direction:column;align-items:flex-start;gap:4px;border-radius:14px}.ubg{display:flex;gap:4px;flex-wrap:wrap}.ub{font:600 .64rem "IBM Plex Mono",monospace;border-radius:999px;padding:2px 7px;white-space:nowrap}.ur{background:' + GOLD + ';color:' + INK + '}.uc{background:' + TEAL + ';color:#fff;border:1px solid ' + GOLD + '}.pkc.on .uc{background:#fff;color:' + TEAL + '}'
+  + '.unw{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 2px}.unw i{font-style:normal;font-size:.7rem;color:#8A6F3E;font-weight:600}'
   + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px;border:1px dashed ' + GOLD + ';border-radius:18px;text-align:center;color:' + MUTE + '}.empty p{margin:0}</style>';
 
 // ---------- FLOWS (v723, 3 Nov: the Palm Jebel Ali owners campaign is a small decision tree) ----------
