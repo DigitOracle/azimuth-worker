@@ -20,6 +20,7 @@
 // Never touches picjob_*, gmp_*, gcal_state.
 import { WA_TEMPLATES } from "./wa_templates.js";
 import { MOMO_TOAST_JS } from "./momo_toast.js";   // v816
+import { followupGroups, followupBody, followupAction, followupLine } from "./camp_followup.js";   // v819 - follow-up groups
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c]));
 const DIG = (s) => String(s || "").replace(/[^0-9]/g, "");
@@ -167,7 +168,7 @@ export async function forgetContact(env, d, how, now) {
   const ci = await getJ(env, "camp_contact_index", []); if (ci.includes(d)) await putJ(env, "camp_contact_index", ci.filter((x) => x !== d));
   const oi = await getJ(env, "camp_optout_index", []); if (oi.includes(d)) await putJ(env, "camp_optout_index", oi.filter((x) => x !== d));
   for (const cid of await getJ(env, "camp_index", [])) {
-    await del("camp_state_" + cid + "_" + d);
+    await del("camp_state_" + cid + "_" + d); await del("camp_fu_" + cid + "_" + d);   // v819
     for (const w of await getJ(env, "camp_msgs_" + cid, [])) { const m = await getJ(env, "camp_msg_" + w, null); if (!m || m.d !== d) continue; m.d = "h:" + h.slice(0, 16); await putJ(env, "camp_msg_" + w, m); out.redacted++; await del("camp_status_" + w); }
     for (const code of await getJ(env, "camp_links_" + cid, [])) { const L = await getJ(env, "camp_link_" + code, null); if (L && L.d === d) { L.d = ""; await putJ(env, "camp_link_" + code, L); out.redacted++; } }
     const q = await getJ(env, "camp_q_" + cid, null); if (q && q.list && q.list.includes(d)) { const i = q.list.indexOf(d); q.list.splice(i, 1); if (i < (q.pos || 0)) q.pos--; await putJ(env, "camp_q_" + cid, q); }
@@ -720,6 +721,11 @@ export async function campaignRoute(request, env, url, deps) {
     if (url.searchParams.get("csv") === "1") { const { rows } = await audienceRows(env, c, now); return new Response(audienceCsv(rows, url.searchParams.get("full") === "1"), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="audience_' + c.id + '.csv"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }
     return pg(await audienceBody(env, c, key, rk, now));
   }
+  if (p === "/momo/campaigns/followup" && request.method === "GET") {   // v819 - both viewers (her own campaign contacts)
+    const c = await getJ(env, "camp_" + String(url.searchParams.get("c") || ""), null); if (!c) return new Response("not found", { status: 404 });
+    const body = await followupBody(env, c, key, rk, now, MOMO_TOAST_JS);
+    return new Response(deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Follow-up</title></head><body>' + body + '</body></html>', { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
   if (p === "/momo/campaigns" && request.method === "GET") {
     const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer);
     const html = deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>';
@@ -767,6 +773,7 @@ export async function campaignRoute(request, env, url, deps) {
     const c = ID_RE.test(id) ? await getJ(env, "camp_" + id, null) : null; if (!c) return J({ ok: false, error: "no such campaign" }, 404);
     const save = async (st, extra) => { c.status = st; Object.assign(c, extra || {}); await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c }); };
     if (a === "update") { if (c.status === "live") return J({ ok: false, error: "pause it first" }, 409); const { c: n, err } = cleanCampaign(b, c); if (err.length) return J({ ok: false, error: err }, 400); Object.assign(c, n); await env.MEETINGS.delete("camp_q_" + id); await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c }); }
+    if (/^fu_(contacted|remove|restore|date)$/.test(a)) { const [code, r] = await followupAction(env, c, b, viewer, now); return J(r, code); }   // v819
     if (a === "dry") { const r = await campStep(env, c, deps, true); return J({ ok: true, result: r }); }
     if (a === "request_live") { if (!["draft", "paused"].includes(c.status)) return J({ ok: false, error: "status " + c.status }, 409); c.live_requested = { at: new Date(now).toISOString(), by: owner ? "owner" : "najjuko" }; await putJ(env, "camp_" + id, c); return J({ ok: true, campaign: c, note: "Kendall must approve: action live with confirm=<id> on his key" }); }
     if (a === "live") {
@@ -862,7 +869,7 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
     + (nu && nu.total ? '<div class=unw><i>Since you last looked</i>' + badgeHtml(nu) + '</div>' : "")
     + '<p class=cm>' + esc(cur.template) + ' · ' + (cur.phone === "main" ? "main number" : "desk number") + ' · ' + esc(cur.window) + ' Dubai · cap ' + cur.cap + '/day · ' + esc((cur.tags || []).join(", ")) + '</p>'
     + (cur.stopped && cur.stopped.why ? '<p class=cw>Stopped: ' + esc(cur.stopped.why) + '</p>' : "") + (cur.live_requested && cur.status !== "live" ? '<p class=cm>Go-live asked ' + esc(cur.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
-    + '<div class=cba>' + acts.join("") + '</div>' + (owner ? '<div class=cba><a class=cb id=aud_link href="/momo/campaigns/audience' + q + '&c=' + encodeURIComponent(cur.id) + '" style="text-decoration:none">Who gets this</a><a class=cb href="/momo/campaigns/contacts' + q + '" style="text-decoration:none">Contacts</a></div>' : '') + '<p class=cr id="res_' + esc(cur.id) + '"></p></div>';   // v816
+    + '<div class=cba>' + acts.join("") + '</div>' + (owner ? '<div class=cba><a class=cb id=aud_link href="/momo/campaigns/audience' + q + '&c=' + encodeURIComponent(cur.id) + '" style="text-decoration:none">Who gets this</a><a class=cb href="/momo/campaigns/contacts' + q + '" style="text-decoration:none">Contacts</a></div>' : '') + followupLine((await followupGroups(env, cur, now)).counts, "/momo/campaigns/followup" + q + "&c=" + encodeURIComponent(cur.id)) + '<p class=cr id="res_' + esc(cur.id) + '"></p></div>';   // v816   // v819 - follow-up groups, warm first
   const funnel = svgFunnel([["Sent", S.sent], ["Delivered", S.delivered], ["Read", S.read], ["Replied", S.replies], ["Clicked", S.uclicks], ["To Najjuko", S.handovers || 0]]);
   // branch donut: the opener's options by their titles, plus opt-outs as "Stopped"
   let parts = [];
