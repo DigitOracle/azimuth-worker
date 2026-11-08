@@ -35,7 +35,7 @@ const M = c.momo;
 ok(M.recognition && /1 deal step logged, 1 viewing, 1 meeting/.test(M.recognition.lines[0]), "recognition counts from the work log");
 ok(M.recognition.lines.some((l) => /^4 campaign replies this week/.test(l)), "campaign replies since last week's card");
 ok(M.recognition.lines.some((l) => l.startsWith("Worked with most: ")), "first names already in her Momo");
-ok(M.celebrations && M.celebrations.lines.some((l) => /Commemoration Day/.test(l)) && M.celebrations.lines.some((l) => /National Day/.test(l)) && /paste them yourself/.test(M.celebrations.note), "UAE days of the week; birthdays left to her");
+ok(M.celebrations && M.celebrations.lines.some((l) => /Commemoration Day/.test(l)) && M.celebrations.lines.some((l) => /National Day/.test(l)) && /Birthdays list/.test(M.celebrations.note), "UAE days of the week; birthdays come from her Birthdays list (v815)");
 ok(M.schedule && M.schedule.lines.length === 4 && calls.length === 4 && /09:00 Huddle/.test(M.schedule.lines[0]), "schedule from her read-only calendar, Mon-Thu");
 ok(M.theme.lines.length === 3 && M.theme.lines.some((l) => /2 open actions/.test(l)) && M.theme.lines.some((l) => /move viewings to mornings\?/.test(l)), "three theme directions from last week's notes and numbers");
 ok((await Hd.createCard(env, "2026-12-07", undefined, {})).momo.notes.some((x) => /Calendar not read/.test(x)), "no calendar: schedule skipped and noted");

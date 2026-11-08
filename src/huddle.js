@@ -25,6 +25,9 @@ import { applyAction as plannerSave } from "./content_planner.js";
 import { SEED as PLAN_SEED } from "./work_plan.js";
 import { BRIDGE_LOG as WL, PEOPLE as WL_PEOPLE, BROKER_TASKS } from "./work_log.js";
 import { draftTasksFrom } from "./draft_tasks.js";
+import { withRoster, rosterMatch } from "./work_log.js";   // v815 - organogram first names for the birthdays
+import { readBirthdays, birthdaysFor, birthdayAction, birthdaysPage } from "./huddle_birthdays.js";   // v815
+import { MOMO_TOAST_JS } from "./momo_toast.js";
 
 export const HUD = "hud_card_", HUD_IDX = "hud_index", HUD_FILE = "hud_file_";
 export const STATUSES = ["Draft", "Filling", "Ready to build", "Built", "Approved", "Presented", "Closed"];
@@ -189,7 +192,9 @@ async function prefill(env, c, prev, deps) {
   if (!rec.length) M.notes.push("No work-log entries last week, so no recognition draft.");
   // celebrations: only the UAE days of the week (birthdays are HR data: she pastes them)
   const end = addDays(c.date, 6), days = PLAN_SEED.filter((s) => s[1] <= end && s[2] >= c.date && (Date.parse(s[2]) - Date.parse(s[1])) / 864e5 <= 3).map((s) => s[3] + " (" + niceDate(s[1] < c.date ? c.date : s[1]) + ")");
-  M.celebrations = days.length ? { lines: days, accepted: false, note: "Birthdays: paste them yourself (HR data)." } : null;
+  let bd = []; try { const people = (await withRoster(env, { people: WL_PEOPLE })).people; bd = birthdaysFor(await readBirthdays(env), c.date, prev ? prev.date : "", people, rosterMatch); } catch (e) {}
+  M.celebrations = days.length || bd.length ? { lines: days, birthdays: bd, accepted: bd.length > 0, note: bd.length ? "Birthdays from your Birthdays list; untick anyone to leave them out." : "No birthdays this week on your Birthdays list." } : null;   // v815 - pre-accepted
+  if (bd.length) c.sections.celebrations = { state: "momo", at: new Date().toISOString() };
   // schedule: her read-only Google Calendar, Monday to Thursday, when it is connected
   if (deps.cal) {
     const out = [];
@@ -283,7 +288,7 @@ export async function cardAction(env, b, nowIso) {
   const c = await getCard(env, b.date); if (!c) return [404, { ok: false, error: "There is no huddle card for that date." }];
   const now = nowIso || new Date().toISOString(), a = String(b.action || ""), sid = String(b.section || "");
   const locked = ["Presented", "Closed"].includes(c.status);
-  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo", "momo_edit"];
+  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo", "momo_edit", "bday_toggle"];
   if (locked && formActs.includes(a)) return [409, { ok: false, error: "This huddle has been presented; the form is closed." }];
   if (formActs.includes(a) && a !== "pick" && a !== "accept" && !SEC[sid]) return [400, { ok: false, error: "Which section?" }];
   if (a === "same") {
@@ -313,6 +318,9 @@ export async function cardAction(env, b, nowIso) {
     if (sid === "market") { if (!c.market.momo_pending) return [409, { ok: false, error: "Nothing to accept." }]; c.market.momo_pending = false; c.market.by = "her"; await marketOutputs(env, c); }
     else { const d = c.momo && c.momo[sid]; if (!d || !d.lines) return [404, { ok: false, error: "Momo has no draft for that section." }]; d.accepted = true; c.sections[sid] = { state: "momo", at: now }; }
     logIt(c, "accept momo " + sid); formChanged(c);
+  } else if (a === "bday_toggle") {   // v815 - untick a name; the log keeps only the action, never the name
+    const L = c.momo && c.momo.celebrations && c.momo.celebrations.birthdays; const x = L && L.find((y) => y.key === String(b.key || ""));
+    if (!x) return [404, { ok: false, error: "Not on this week's list." }]; x.on = b.on !== false; logIt(c, "birthday toggle");
   } else if (a === "momo_edit") {   // v813 - her own wording for a section Momo drafted (or a section with no form fields yet): saved only when she taps Save
     if (sid === "market") return [400, { ok: false, error: "Change the market topics with the ticks." }];
     const lines = (Array.isArray(b.lines) ? b.lines : String(b.text || "").split("\n")).map((x) => String(x).replace(/\s+/g, " ").trim().slice(0, 300)).filter(Boolean).slice(0, 12);
@@ -448,12 +456,14 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
   + '.mo{border:1px solid #C5A56A;border-radius:14px;background:#FBF6EA;padding:10px 12px;margin:8px 0}.mo label{display:block;font:600 .7rem "IBM Plex Mono",monospace;color:#8A6F3E;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}.mo p{margin:4px 0;font:500 .88rem "IBM Plex Sans",sans-serif}.mo .mn{color:#8A6F3E;font-size:.8rem}.tc small.why{color:#5F6B66;font-family:"IBM Plex Sans",sans-serif}.tc.on small.why{color:#E6F2EC}'
   + '.ag{display:grid;gap:8px;margin:8px 0}.ak{border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:10px 12px}.ak.ok{background:var(--gr);border-color:var(--gr);color:#fff}.ak b{display:block;font:600 .95rem "IBM Plex Sans",sans-serif}.mt{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.chip{border-radius:99px;padding:2px 9px;font:600 .7rem "IBM Plex Mono",monospace;background:#F3EFE7;color:#5F6B66}.chip.gold{background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A}.b3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}.b3 button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:10px;padding:8px 2px;font:600 .8rem "IBM Plex Sans",sans-serif}'
   + '.aa{display:grid;grid-template-columns:1fr 90px 64px;gap:6px;margin:10px 0}.aa input{border:1px solid #E3DDD1;border-radius:10px;padding:8px;font:500 .88rem "IBM Plex Sans",sans-serif;min-width:0;background:#fff}'
+  + '.pvw{aspect-ratio:16/9;background:#FAF7F1;border:1px solid #0A4F4A;border-radius:10px;padding:8px 10px;box-sizing:border-box;overflow:hidden;cursor:zoom-in;display:flex;flex-direction:column;font-size:9px}.pvw .pvh{display:flex;justify-content:space-between;font:600 1em "IBM Plex Mono",monospace;color:#8A6F3E}.pvw ul{margin:.6em 0 0;padding-left:1.4em;flex:1;font:600 1.3em/1.35 "IBM Plex Sans",sans-serif;color:#0A4F4A}.pvw li{margin:.2em 0}.pvw .phd{color:#C5A56A}.pvw .pvf{font:500 .8em "IBM Plex Sans",sans-serif;color:#8B918E}.pvw.big{font-size:13px;cursor:zoom-out;width:100%;aspect-ratio:auto;min-height:56vw;max-height:88vh;overflow:auto}'
+  + '.pvo{position:fixed;inset:0;z-index:60;background:rgba(28,35,33,.6);display:flex;align-items:center;padding:12px;box-sizing:border-box}.pvi{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pvi img{width:100%;border-radius:8px;border:1px solid #E3DDD1}.bdt{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #EFE6D6;font-size:.9rem}.bdt small{color:#8A6F3E;margin-left:auto}.mo label.bdt{display:flex;text-transform:none;letter-spacing:0;font:500 .9rem "IBM Plex Sans",sans-serif;color:#1C2321;margin:0}.mo label.bdt small{font:500 .78rem "IBM Plex Mono",monospace}'
   + '.sw{display:flex;align-items:center;justify-content:space-between;border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:10px 12px;margin:10px 0;font:500 .86rem "IBM Plex Sans",sans-serif}</style>';
 
 export function cardPage(c, key) {
   const k = encodeURIComponent(key);
   if (!c || c.stub) return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE</div><h1>Huddle</h1><div class=hc><p class=hs>' + esc(c ? nextStep(c) : "No card yet.") + "</p></div>";
-  const D = { card: cardOut(c), prev: null, key, sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })) };
+  const D = { card: cardOut(c), prev: null, key, sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS };
   return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
     + '<div id=hud></div><div class=sheet id=sh><div class=in id=shi></div></div>'
     + '<script>var HD=' + jsonIn(D) + ';</script><script>' + CARD_JS + '</script>';
@@ -500,6 +510,8 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  var skipped=(C.skip_slides||[]).length&&s.slides.every(function(n){return C.skip_slides.indexOf(n)>=0});
  var wh=(HD.sections.filter(function(x){return x.id===id})[0]||{}).where||"";var h='<h2>'+e(s.name)+'</h2><p class=hs>Shown on '+e(wh)+' (slide'+(s.slides.length>1?'s ':' ')+s.slides.join(" and ")+') · '+e(src)+'</p>';
  var md=(C.momo||{})[id];if(md&&md.lines)h+='<div class=mo><label>'+(md.accepted?"Momo's draft · accepted":"Drafted by Momo")+'</label>'+md.lines.map(function(l){return '<p>'+e(l)+'</p>'}).join("")+(md.note?'<p class=mn>'+e(md.note)+'</p>':'')+(md.accepted?'':'<button type=button class=btn id=bmomo>Accept</button>')+'</div>';
+ h+=preview(id,keys);   // v815 - see the slide while filling it
+ if(id==="celebrations"&&md&&(md.birthdays||[]).length)h+='<div class=mo><label>Birthdays this week</label>'+md.birthdays.map(function(x){return '<label class=bdt><input type=checkbox data-bd="'+e(x.key)+'"'+(x.on?" checked":"")+'> <b>'+e(x.name)+'</b> <small>'+e(x.when)+'</small></label>'}).join("")+'<p class=mn><a href="/momo/work/huddle/birthdays'+location.search+'">Birthdays list</a></p></div>';
  if(!keys.length)h+='<p class=hs>No fields of this section are in the form yet.</p>';
  keys.forEach(function(k){var dr=C.drafted_by_claude.indexOf(k)>=0;h+='<div class=fv><label>'+e(k)+(dr?'<span class=dc>drafted by Claude</span>':'')+'</label><div class=lw>Last week: '+show(P[k])+'</div><textarea data-k="'+e(k)+'" style="display:none">'+e(typeof C.form[k]==="string"?C.form[k]:C.form[k]==null?"":JSON.stringify(C.form[k]))+'</textarea></div>'});
  h+='<div class=two id=bsr><button type=button class=btn id=bsame>Same as last week</button><button type=button class="btn alt" id=bedit>Edit</button></div>';
@@ -508,6 +520,8 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  h+='<div class=sw><span>Skip slide'+(s.slides.length>1?"s":"")+' this week</span><input type=checkbox id=bskip '+(skipped?"checked":"")+'></div>';
  if(s.done)h+='<button type=button class="btn alt" id=breo>Mark not done</button>';
  $("shi").innerHTML=h;$("sh").classList.add("on");
+ $("shi").querySelectorAll("[data-bd]").forEach(function(x){x.onchange=function(){api({action:"bday_toggle",section:"celebrations",key:x.getAttribute("data-bd"),on:x.checked},function(){openSec("celebrations")})}});
+ $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
  if($("bmomo"))$("bmomo").onclick=function(){api({action:"accept_momo",section:id},closeSh)};
  $("bsame").onclick=function(){api({action:"same",section:id},closeSh)};
  $("bedit").onclick=function(){$("shi").querySelectorAll("textarea[data-k]").forEach(function(t){t.style.display="block"});$("bsr").style.display="none";$("bedw").style.display="block";var f=$("shi").querySelector("textarea[data-k]")||$("bmed");if(f)f.focus()};   // v813 - Edit opens the text; only Save saves
@@ -516,15 +530,26 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  $("bskip").onchange=function(){api({action:"skip",section:id,on:this.checked},closeSh)};
  if($("breo"))$("breo").onclick=function(){api({action:"reopen",section:id},closeSh)};
 }
+function preview(id,keys){var s=sec(id),segs=(HD.segs||[]).filter(function(g){return g.slides.some(function(n){return s.slides.indexOf(n)>=0})}),g=segs[0]||{n:"",name:s.name,min:0};
+ var md=(C.momo||{})[id],lines=[];
+ if(id==="market")lines=C.market.picked.map(function(t){var x=C.market.topics.filter(function(y){return y.id===t})[0];return x?x.line:""});
+ else{keys.forEach(function(k){if(/_notes$/i.test(k))return;var v=C.form[k];if(v==null||v==="")lines.push("[placeholder]");else lines.push(typeof v==="string"?v:JSON.stringify(v))});if(!lines.length&&md&&md.lines)lines=md.lines.slice()}
+ if(id==="celebrations"&&md&&md.birthdays)md.birthdays.forEach(function(x){if(x.on)lines.push("Happy birthday, "+x.name+" ("+x.when+")")});
+ var body=lines.slice(0,6).map(function(l){return '<li'+(l==="[placeholder]"?' class=phd':'')+'>'+e(l)+'</li>'}).join("")||'<li class=phd>[placeholder]</li>';
+ var h='<p class=hs style="margin:6px 0 4px">How it will show (tap to enlarge)</p><div class=pvw><div class=pvh><span>'+e(g.n)+' '+e(g.name)+'</span><span>'+e((HD.hosts||[]).join(" · "))+'</span></div><ul>'+body+'</ul><div class=pvf>Presenter view · the slide design comes from the DNA</div></div>';
+ if(C.build&&C.build.slides)h+='<p class=hs style="margin:8px 0 4px">Last built slide'+(s.slides.length>1?'s':'')+'</p><div class=pvi>'+s.slides.filter(function(n){return n<=C.build.slides}).map(function(n){return '<img alt="Slide '+n+'" src="/momo/work/huddle/file?date='+C.date+'&kind=slide&n='+n+'&'+location.search.slice(1)+'">'}).join("")+'</div>';
+ return h}
 function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
  function body(){var W=C.market.why||{},h='<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
   if(C.market.momo_pending)h+='<div class=mo><label>Momo ranked the topics and pre-ticked 4</label><p>Change any tick, or accept them as they are.</p><button type=button class=btn id=macc>Accept Momo\'s 4</button></div>';
   if(C.market.cp_code||C.market_for_pdf.length)h+='<div class=mo><label>Also done with these 4</label>'+(C.market.cp_code?'<p>Draft market post in your Content Planner ('+e(C.market.cp_code)+'), not published</p>':'')+(C.market_for_pdf.length?'<p>Marked for the team market PDF</p>':'')+'</div>';
+  h+=preview("market",[]);
   if(!T.length)h+='<p class=hs>No topics yet. Your Claude adds 15 to 20 from Najma before the build.</p>';
   h+='<div class=tp>';T.forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small>'+(on&&W[t.id]?'<small class=why>Why: '+e(W[t.id])+'</small>':'')+'</span></div>'});
   h+='</div><button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
   $("shi").querySelectorAll(".tc").forEach(function(d){d.onclick=function(){var id=d.getAttribute("data-t"),i=pick.indexOf(id);if(i>=0)pick.splice(i,1);else if(pick.length<4)pick.push(id);body()}});
   $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)};
+  $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML=x.outerHTML;o.firstChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
   if($("macc"))$("macc").onclick=function(){api({action:"accept_momo",section:"market"},closeSh)}}
  body();$("sh").classList.add("on")}
 window.hudOpen=openSec;draw();
@@ -587,9 +612,11 @@ export async function huddleRoute(request, env, url, deps) {
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   if (p === "/momo/work/huddle/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) {}
+    if (/^bd_/.test(String(b.action || ""))) { const [s2, o2] = await birthdayAction(env, b); return J(o2, s2); }   // v815 - the Birthdays list
     const [s, o] = await cardAction(env, b); return J(o, s);
   }
   if (request.method !== "GET") return null;
+  if (p === "/momo/work/huddle/birthdays") return H(deps.page(key, rk, birthdaysPage(await readBirthdays(env), key, MOMO_TOAST_JS)));   // v815
   if (p === "/momo/work/huddle") {
     const d = url.searchParams.get("date"), c = dOk(d) ? await getCard(env, d) : await nextCard(env, undefined, { cal: deps.cal });
     const prev = c && !c.stub && c.prev_date ? await getCard(env, c.prev_date) : null;
