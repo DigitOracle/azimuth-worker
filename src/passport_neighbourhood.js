@@ -98,6 +98,60 @@ export function dldFloors(pack) {
   return w.map((b) => (b.name || "building " + (b.no || "?")) + " " + (+b.floors) + " floors").join("; ");
 }
 
+// v826 - building-level sales (nb.facts.bsales, lk_plot_building_sales) and the project figures (nb.facts.bind, lk_plot_project_bind), kept apart.
+// plot: this plot's own figure, from sales bound through the building. project: the project's figures; plot_level=false means a project average, never this plot's.
+const tc = (s) => String(s || "").toLowerCase().replace(/(^|[\s\-(\/])([a-z])/g, (m, a, c) => a + c.toUpperCase());
+export function bsalesView(facts) {
+  const f = facts || {}, s = f.bsales, b = f.bind, out = { plot: null, project: null };
+  if (s && +s.sales > 0) {
+    const n = Math.round(+s.sales), n12 = s.sales_12m != null ? Math.round(+s.sales_12m) : null, nb = Math.round(+s.building_names_n || 0);
+    const med = s.median_aed_per_m2 != null && isFinite(+s.median_aed_per_m2) ? +s.median_aed_per_m2 : null;
+    const med12 = n12 != null && n12 >= 5 && s.median_aed_per_m2_12m != null && isFinite(+s.median_aed_per_m2_12m) ? +s.median_aed_per_m2_12m : null;   // hidden under 5 sales
+    const names = nb > 1 ? (s.names || []).slice(0, 8).map(tc) : [];
+    out.plot = { sales: n, sales_12m: n12, median: med, median_12m: med12, last_sale: s.last_sale || null, buildings: nb, names, more: nb > names.length && names.length ? nb - names.length : 0,
+      headline: "Sales in buildings on this plot: " + int(n) + (n12 != null ? " (last 12 months: " + int(n12) + ")" : "") + (med != null ? ", median AED " + int(med) + "/m²" : ""),
+      buildings_line: nb > 1 ? int(nb) + " buildings on this plot" : "" };
+  }
+  if (b && (b.project_sales != null || b.project_median_aed_per_m2 != null)) {
+    const own = b.plot_level === true;
+    out.project = { plot_level: own, sales: b.project_sales != null ? Math.round(+b.project_sales) : null, sales_12m: b.project_sales_12m != null ? Math.round(+b.project_sales_12m) : null,
+      median: b.project_median_aed_per_m2 != null ? +b.project_median_aed_per_m2 : null, last_sale: b.last_sale || null, plots: b.plots_in_project != null ? Math.round(+b.plots_in_project) : null,
+      label: own ? "Project on this plot" : "Project average",
+      note: own ? "The whole project sits on this plot, so these are this plot's sales." : "Across the whole project" + (b.plots_in_project != null ? " (" + int(b.plots_in_project) + " plots)" : "") + ". A project average, not this plot's own figure." };
+  }
+  return out;
+}
+
+// v826 - the two sales cards for the Plot Passport (cream theme cards, icons not emoji). esc is the page's HTML escaper.
+export function bsalesCardsHtml(v, esc) {
+  const e = esc || ((x) => String(x == null ? "" : x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])));
+  if (!v || (!v.plot && !v.project)) return "";
+  const tile = (l, val, sub) => '<div class=f><div class=l>' + e(l) + '</div><div class=v>' + e(val) + "</div>" + (sub ? '<div class=l>' + e(sub) + "</div>" : "") + "</div>";
+  let h = "";
+  if (v.plot) {
+    const p = v.plot;
+    h += '<div class="bsc own" data-bsales=plot><h3 class=bh>Sales in buildings on this plot<span class=n>this plot</span></h3><div class=grid2>'
+      + tile("Sales, all time", int(p.sales), p.last_sale ? "last sale " + nbDate(p.last_sale) : "")
+      + tile("Sales, last 12 months", p.sales_12m != null ? int(p.sales_12m) : "Not recorded", "")
+      + (p.median != null ? tile("Median, all time", "AED " + int(p.median) + "/m²", "") : "")
+      + (p.median_12m != null ? tile("Median, last 12 months", "AED " + int(p.median_12m) + "/m²", "") : p.sales_12m != null ? tile("Median, last 12 months", "Not shown", "fewer than 5 sales") : "")
+      + "</div>"
+      + (p.buildings > 1 ? '<p class=cnt><b>' + e(p.buildings_line) + "</b></p>" + (p.names.length ? '<div class=bnm>' + p.names.map((n) => "<span>" + e(n) + "</span>").join("") + (p.more ? "<span class=x>and " + int(p.more) + " more</span>" : "") + "</div>" : "") : "")
+      + '<p class=note>' + e(p.headline) + ". Land Department sales linked to this plot through their building (unit sizes registered on this plot, or building name, footprint and register name).</p></div>";
+  }
+  if (v.project) {
+    const q = v.project;
+    h += '<div class="bsc ' + (q.plot_level ? "own" : "avg") + '" data-bsales=project><h3 class=bh>' + e(q.label) + '<span class=n>' + (q.plot_level ? "this plot" : "not this plot alone") + "</span></h3><div class=grid2>"
+      + (q.sales != null ? tile("Sales, all time", int(q.sales), q.last_sale ? "last sale " + nbDate(q.last_sale) : "") : "")
+      + (q.sales_12m != null ? tile("Sales, last 12 months", int(q.sales_12m), "") : "")
+      + (q.median != null ? tile(q.plot_level ? "Median, all time" : "Project average median", "AED " + int(q.median) + "/m²", "") : "")
+      + '</div><p class=note>' + e(q.note) + "</p></div>";
+  }
+  return h;
+}
+export const BSALES_CSS = ".bsc{border:1px solid var(--line);border-radius:12px;padding:10px;margin:0 0 12px}.bsc.own{border-left:3px solid var(--gold)}.bsc.avg{border-style:dashed}.bsc .bh{margin-top:0}.bsc .note{margin:8px 0 0}"
+  + ".bnm{display:grid;grid-template-columns:1fr 1fr;gap:6px}.bnm span{background:var(--raise);border-radius:9px;padding:6px 8px;font-size:.78rem;overflow-wrap:anywhere}.bnm .x{color:var(--muted)}";
+
 // plot facts: height, project bind, zoning (display rules from the coordinator, 4 Nov 2026)
 export function plotFactLines(pack) {
   const f = ((pack || {}).nb || {}).facts || {}, L = [], missing = [], flags = [];
@@ -126,9 +180,17 @@ export function plotFactLines(pack) {
   if (h && h.src && h.m != null) {
     L.push("Height evidence (background only, put it in section 12 Evidence, never as a headline or beside the floors): tallest building about " + Math.round(h.m) + " m, " + (h.kind || h.src) + " (source " + h.src + "). Not a Dubai Municipality height; never call it one." + (/towers read low/i.test(h.kind || "") ? " Note: towers read low on this source, check." : ""));
   }
+  // v826 (audit fix 4, label half): sales linked to THIS plot through its buildings, printed apart from any project average
+  const bv = bsalesView(f);
+  if (bv.plot) {
+    const p = bv.plot;
+    L.push("Sales in buildings on this plot (Land Department sales linked to this plot through their building; this plot's own figure): " + p.headline
+      + (p.median_12m != null ? ". Last 12 months median AED " + int(p.median_12m) + "/m²" : p.sales_12m < 5 ? ". No 12-month median: fewer than 5 sales in the last 12 months" : "")
+      + (p.last_sale ? ". Last sale " + nbDate(p.last_sale) : "") + (p.buildings_line ? ". " + p.buildings_line + (p.names.length ? " (" + p.names.join(", ") + (p.more ? ", and " + p.more + " more" : "") + ")" : "") : "") + ".");
+  }
   const b = f.bind;
   if (b) {
-    const lvl = b.plot_level === true ? "plot level" : "project-level (one of " + (b.plots_in_project != null ? int(b.plots_in_project) : "several") + " plots)";
+    const lvl = b.plot_level === true ? "plot level" : "project average, project-level (one of " + (b.plots_in_project != null ? int(b.plots_in_project) : "several") + " plots)" + (bv.plot ? "; print it SEPARATELY from 'Sales in buildings on this plot', labelled 'project average'" : "");
     const xs = [];
     if (b.project_sales != null) xs.push(int(b.project_sales) + " sales all time" + (b.project_sales_12m != null ? ", " + int(b.project_sales_12m) + " in the last 12 months" : ""));
     if (b.project_median_aed_per_m2 != null) xs.push("median AED " + int(b.project_median_aed_per_m2) + " per m2");

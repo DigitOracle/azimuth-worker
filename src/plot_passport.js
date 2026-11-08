@@ -12,6 +12,7 @@
 // Page script is String.raw with no substitutions and no backticks.
 
 import { LTF_JS } from "./landtype_filters.js";
+import { bsalesView, bsalesCardsHtml, BSALES_CSS } from "./passport_neighbourhood.js";   // v826 - building-level sales cards
 import { withCommunities } from "./district_communities.js";   // v737 - community names beside official district names   // v731 - DLD use / land type / tenure filters on the district/building picker
 const PP_ID = /^naj:plot:[A-Za-z0-9\-]{1,40}$/;
 const normQ = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -296,10 +297,10 @@ function chart(P,kind){var Y=P.years,S=P[kind]||{},W=340,H=190,top=22,base=150,g
        +'<text x="'+(x+bw/2)+'" y="'+(base+12)+'" class="dn'+(dc?' dd':'')+'" text-anchor=middle>'+(dc?'d ':'')+c[1]+'</text>'});
     s+='<text x="'+(10+yi*gw+gw/2)+'" y="'+(base+30)+'" class=yr text-anchor=middle>'+esc(y)+(y===P.ytd?' to date':'')+'</text>'});
   return s+'</svg>'}
-function pricesPanel(p){var P=p.prices;if(!P)return '<p class=empty>No registered sales or rent contracts are tied to a building or project on this plot.</p>';
+function pricesPanel(p){var P=p.prices,BS=p.sales_cards||"";if(!P)return BS+'<p class=empty>No registered sales or rent contracts are tied to a building or project on this plot.</p>';
   var who=P.scope==="building"?"This building":"This project",dis=false;["rent","sale"].forEach(function(k){P.years.forEach(function(y){[1,2,3].forEach(function(b){var c=((P[k]||{})[y]||{})[b];if(c&&c[2]==="d")dis=true})})});
   var leg='<div class=lg><span><i class=b1></i>1 bed</span><span><i class=b2></i>2 bed</span><span><i class=b3></i>3 bed</span>'+(dis?'<span><i class="b2 dis"></i>district (d)</span>':'')+'</div>';
-  return '<p class=cnt><b>'+esc(who)+': '+esc(P.name||"")+'</b><small>Registered deals for the '+(P.scope==="building"?"building":"whole project")+', not for this plot alone. Median per year; the small number under each bar is how many deals it rests on'+(dis?'. Where it had no deal that year, the lighter bar marked d is the district median':'')+'.</small></p>'
+  return BS+'<p class=cnt><b>'+esc(who)+': '+esc(P.name||"")+'</b><small>Registered deals for the '+(P.scope==="building"?"building":"whole project")+', not for this plot alone. Median per year; the small number under each bar is how many deals it rests on'+(dis?'. Where it had no deal that year, the lighter bar marked d is the district median':'')+'.</small></p>'
    +leg+'<h3 class=bh>'+ic("key")+'Annual rent (new contracts)</h3>'+chart(P,"rent")+'<h3 class=bh>'+ic("tag")+'Purchase price</h3>'+chart(P,"sale")
    +'<p class=note>Rent: new Ejari contracts for flats, renewals left out. Purchase: Land Department registered sales of flats, at the registered price. Deals to '+esc(dt(P.to))+'.</p>'}
 // v696 (Kendall, 3 Nov 2026): the building's life as milestones, oldest first, from the timeline the builder already writes.
@@ -396,7 +397,7 @@ export function plotPassportHtml(key, rk, meta, deps) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
     + '<title>Plot passport — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + (deps.NAJ_FONTS || "")
     + '<script>try{var t=localStorage.getItem("naj_thm")||((window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>'
-    + "<style>" + PP_CSS + (deps.NAJ_NAV_CSS || "") + "html[data-theme=light] .nnav{background:rgba(242,238,227,.95);border-top-color:#DDD5C2}</style></head>"
+    + "<style>" + PP_CSS + BSALES_CSS + (deps.NAJ_NAV_CSS || "") + "html[data-theme=light] .nnav{background:rgba(242,238,227,.95);border-top-color:#DDD5C2}</style></head>"
     + '<body data-key="' + escH(key) + '" data-rk="' + escH(rk || "") + '">' + icTpl
     + '<h1>Plot <em>passport</em></h1><p class=sub>One plot: flats on the market and who is selling them, prices, buildings and dates.</p>'
     + '<section class="card browse" aria-label="Find a plot by place"><h2>' + ic("pin") + 'Find it by place</h2><div class=steps>'
@@ -456,6 +457,7 @@ export async function plotPassportRoutes(request, env, url, deps) {
     const id = url.searchParams.get("id") || "";
     if (!PP_ID.test(id)) return json({ ok: false, error: "That is not a Najma plot id." }, 400);
     const plot = await ppGet(env, id);
+    if (plot) { try { const nb = await readJson(env, "pp_nb_" + (ppCrc32(id) % 4096)); const c = bsalesCardsHtml(bsalesView(nb && nb[id] && nb[id].facts), escH); if (c) plot.sales_cards = c; } catch (e) {} }   // v826 - building-level sales beside the project average
     return plot ? json({ ok: true, plot }) : json({ ok: false, error: "That plot is not in the passport data yet." }, 404);
   }
   const html = (body) => { const r = { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }; return deps.clientResp ? deps.clientResp(env, url, body, r) : new Response(body, r); };
