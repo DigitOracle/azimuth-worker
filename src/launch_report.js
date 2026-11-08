@@ -127,14 +127,16 @@ function head(title, sub, n) {
   return '<div class=hd><img class=lg src="najma_logo.png" alt="Najma"><div><div class=kick>N A J M A &nbsp; L A U N C H &nbsp; R E P O R T</div><div class=hs>' + esc(sub) + '</div></div>' + (n ? '<div class=no>' + esc(n) + "</div>" : "") + "</div>";
 }
 
+const cmp = (d) => String(d || "").replace(/north/g, "N").replace(/south/g, "S").replace(/east/g, "E").replace(/west/g, "W").replace(/-/g, "");
+
 export function launchPage(r, e, n, total, sub, by) {
   const ps = picsOf(r, e), hero = ps[0], snaps = ps.slice(1, 4);
   const price = r.from_aed ? "from " + aedShort(r.from_aed) : "";
   const tiles = facts(r).map(([ic, lab, v]) => '<div class=tl>' + I(IC[ic]) + '<div><b>' + lab.toUpperCase() + '</b><p>' + esc(v) + "</p></div></div>").join("");
   const status = r.registered ? "On the Dubai Land Department register" + (r.dld_project_number ? " (project " + esc(r.dld_project_number) + ")" : "") : "Launched, not yet on the Dubai Land Department register";
   const notes = [status, r.zone ? "Dubai 2040: " + r.zone : "", (r.sources_n || 0) + " source" + (r.sources_n === 1 ? "" : "s") + ", first seen " + dSay(r.first_seen)].filter(Boolean).join(" · ");
-  const near = ((e && e.near) || []).map((x) => '<tr><th>' + esc(x.lab) + '</th><td class=nm>' + esc(x.name) + '</td><td>' + x.km.toFixed(1) + " km " + esc(x.dir) + "</td></tr>").join("")
-    + ((e && e.marks) || []).map((x) => '<tr><th>' + esc(x.name) + '</th><td class=nm></td><td>' + x.km.toFixed(1) + " km " + esc(x.dir) + "</td></tr>").join("");
+  const near = ((e && e.near) || []).map((x) => '<tr><th>' + esc(x.lab) + '</th><td class=nm>' + esc(x.name) + '</td><td>' + x.km.toFixed(1) + " km " + esc(cmp(x.dir)) + "</td></tr>").join("")
+    + ((e && e.marks) || []).map((x) => '<tr><th>' + esc(x.name) + '</th><td class=nm></td><td>' + x.km.toFixed(1) + " km " + esc(cmp(x.dir)) + "</td></tr>").join("");
   const src = (e && e.source ? e.source : "") + ((r.links || []).length ? " · " + (r.links || []).slice(0, 2).map((u) => esc(u.replace(/^https?:\/\/(www\.)?/, ""))).join(" · ") : "");
   return '<section class=pg>' + head("", sub, n + " / " + (total - 1))
     + (hero ? '<div class=hero><img src="' + esc(hero.url) + '" alt=""><span class=cr>Image: ' + esc(hero.credit || (e && e.credit) || "") + "</span></div>" : '<div class="hero none"><span>' + esc(String(r.developer || "?").slice(0, 1)) + "</span></div>")
@@ -156,7 +158,7 @@ export function coverPage(rows, data, title, sub, total, by) {
 }
 
 export const REPORT_CSS = '@page{size:1080px 1920px;margin:0}*{box-sizing:border-box}body{margin:0;background:#E9E2D3;font-family:"IBM Plex Sans","Segoe UI",sans-serif;color:' + INK + ';-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-  + '.pg{width:1080px;height:1920px;margin:0 auto 24px;position:relative;overflow:hidden;background:' + CREAM + ';padding:34px 60px 0;page-break-after:always}'
+  + '.pg{width:1080px;height:1920px;margin:0 auto 24px;position:relative;overflow:hidden;background:' + CREAM + ';padding:34px 60px 22px;page-break-after:always;display:flex;flex-direction:column}'
   + '.hd{display:flex;align-items:center;gap:16px;height:80px}.lg{height:70px}.kick{font:600 20px "IBM Plex Sans",sans-serif;color:' + GOLD + ';letter-spacing:.04em}.hs{font:400 20px Fraunces,Georgia,serif;color:' + INK + '}.no{margin-left:auto;font:700 30px Fraunces,Georgia,serif;color:' + NAVY + '}'
   + '.hero{margin-top:10px;height:440px;border-radius:20px;overflow:hidden;position:relative;background:#EFE6D4}.hero img{width:100%;height:100%;object-fit:cover}.hero .cr{position:absolute;right:8px;bottom:8px;background:rgba(31,43,68,.82);color:#fff;font-size:16px;border-radius:8px;padding:3px 10px}'
   + '.none{display:flex;align-items:center;justify-content:center}.none span{width:110px;height:110px;border-radius:50%;background:#0A4F4A;color:#F3E7CF;display:flex;align-items:center;justify-content:center;font:600 54px Fraunces,Georgia,serif}'
@@ -165,9 +167,9 @@ export const REPORT_CSS = '@page{size:1080px 1920px;margin:0}*{box-sizing:border
   + '.tls{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tl{display:flex;gap:14px;background:#fff;border:2px solid ' + GOLD + ';border-radius:16px;padding:14px 18px;min-height:104px}.tl b{font:600 16px "IBM Plex Sans",sans-serif;color:' + GOLD + '}.tl p{margin:4px 0 0;font-size:20px}.tl.wide{margin-top:12px;min-height:84px}'
   + '.sn{display:flex;gap:14px;margin-top:14px}.sn figure{flex:1;margin:0}.sn img{width:100%;height:180px;object-fit:cover;border-radius:12px}.sn figcaption b{display:block;font-size:17px;color:' + NAVY + '}.sn figcaption span{font-size:14px;color:' + MUTE + '}'
   + '.two{display:flex;gap:16px;margin-top:14px}.pn{background:#fff;border:2px solid ' + GOLD + ';border-radius:18px;padding:14px 20px}.pn.map{flex:1.28}.pn.area{flex:1}.pn h3{font:700 26px Fraunces,Georgia,serif;color:' + NAVY + ';margin:0 0 8px}'
-  + '.dist{width:100%;border-collapse:collapse;margin-top:8px;font-size:17px}.dist th{text-align:left;color:' + NAVY + ';width:120px}.dist td{text-align:right;font-weight:600}.dist td.nm{text-align:left;font-weight:400;color:' + MUTE + ';max-width:180px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}'
+  + '.dist{width:100%;border-collapse:collapse;margin-top:8px;font-size:17px}.dist th{text-align:left;color:' + NAVY + ';width:120px}.dist td{text-align:right;font-weight:600;white-space:nowrap}.dist td.nm{text-align:left;font-weight:400;color:' + MUTE + ';max-width:180px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}'
   + '.mut{font-size:15px;color:' + MUTE + ';margin-top:6px}.an{font-weight:600;font-size:19px;margin-bottom:8px}.al{font-size:17px;color:' + MUTE + ';margin-top:8px}.av{font:700 30px Fraunces,Georgia,serif;color:' + NAVY + '}.av span{font:400 16px "IBM Plex Sans",sans-serif;color:' + MUTE + ';margin-left:10px}.as{font-size:14px;color:' + MUTE + ';margin-top:14px}.nomap{font-size:18px;color:' + MUTE + ';padding:40px 0}'
-  + '.src{font-size:16px;margin-top:12px;color:' + INK + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ft{position:absolute;left:0;right:0;bottom:22px;text-align:center;font-size:17px;color:' + MUTE + ';line-height:1.6}'
+  + '.src{font-size:16px;margin-top:12px;color:' + INK + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ft{margin-top:auto;padding-top:14px;text-align:center;font-size:17px;color:' + MUTE + ';line-height:1.6}'
   + '.cover{text-align:center}.lgc{height:140px;margin-top:20px}.cover h1{font:700 62px Fraunces,Georgia,serif;color:' + NAVY + ';margin:8px 0}.cover .hs{font-size:30px}.lead{font-size:21px;color:' + MUTE + '}.rule{width:300px;height:2px;background:' + GOLD + ';margin:0 auto 18px}'
   + '.cg{display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left}.cc{position:relative;background:#fff;border:2px solid ' + GOLD + ';border-radius:16px;padding:8px;height:252px}.cc img,.ci{width:100%;height:160px;object-fit:cover;border-radius:12px}.ci.none span{width:70px;height:70px;font-size:34px}.cn{position:absolute;left:16px;top:16px;background:' + NAVY + ';color:#fff;border-radius:8px;padding:2px 10px;font-weight:700}'
   + '.cb{display:flex;justify-content:space-between;gap:8px;margin:8px 8px 0}.cb b{font:700 23px Fraunces,Georgia,serif;color:' + NAVY + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cb i{font:700 22px Fraunces,Georgia,serif;color:' + GOLD + ';font-style:normal;white-space:nowrap}.cs{margin:4px 8px;font-size:18px;color:' + MUTE + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.note{font-size:17px;color:' + MUTE + ';margin-top:14px}'
