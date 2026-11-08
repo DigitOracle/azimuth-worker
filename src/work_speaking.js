@@ -37,6 +37,8 @@ export function cleanItem(x, prev) {
   else if (!Array.isArray(o.materials)) o.materials = [];
   if (has("photos")) o.photos = (Array.isArray(g.photos) ? g.photos : []).slice(0, 200).map((p) => ({ f: slug(p && p.f), cap: S(p && p.cap, 160).trim() })).filter((p) => p.f);   // v797 event photos, files in KV speaking_file_<person>_<f>
   else if (!Array.isArray(o.photos)) o.photos = [];
+  if (has("videos")) o.videos = (Array.isArray(g.videos) ? g.videos : []).slice(0, 100).map((p) => ({ f: slug(p && p.f), cap: S(p && p.cap, 160).trim() })).filter((p) => p.f);   // v808 event videos, raw bytes in KV speaking_file_<person>_<f>
+  else if (!Array.isArray(o.videos)) o.videos = [];
   if (has("shareWith")) o.shareWith = (Array.isArray(g.shareWith) ? g.shareWith : []).filter((w) => w === "najjuko");   // v797 people who may see this event and its photos
   else if (!Array.isArray(o.shareWith)) o.shareWith = [];
   if (has("due")) o.due = cleanDue(g.due);   // v648 - absent = defaults by type (dueOf); [] = nothing due
@@ -269,7 +271,7 @@ if(i.outline&&i.outline.length){var tb=el("table"),h=el("tr");["Time","Min","Seg
 i.outline.forEach(function(s){var r=el("tr");[s.time,s.mins||"",s.segment,s.covers,s.interactive].forEach(function(x){r.appendChild(el("td","",x))});tb.appendChild(r)});d.appendChild(tb)}
 if(i.website){var w=el("a","",i.website);w.href=i.website;w.target="_blank";w.rel="noopener noreferrer";var wp=el("p");wp.appendChild(w);d.appendChild(wp)}
 (i.materials||[]).forEach(function(m){var mp=el("p"),ma=el("a","",m.label);ma.href=/\/momo\/work\/speaking\/file\?/.test(m.url)?m.url.replace(/^https?:\/\/[^\/]+/,"")+"&key="+encodeURIComponent(KEY):m.url;ma.target="_blank";ma.rel="noopener noreferrer";mp.appendChild(ma);d.appendChild(mp)});
-if(i.photos&&i.photos.length){var pc=el("details","sphc");pc.onclick=function(e){e.stopPropagation()};pc.appendChild(el("summary","","Photos ("+i.photos.length+")"+(i.shareWith&&i.shareWith.length?" | shared with Najjuko":"")));var zb=el("a","zipb","Download all ("+i.photos.length+" photos)");zb.href="/momo/work/speaking/zip?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);zb.onclick=function(e){e.stopPropagation()};pc.appendChild(zb);var pg=el("div","sph");i.photos.forEach(function(p){var pa=el("a");pa.href="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY);pa.target="_blank";pa.rel="noopener noreferrer";pa.onclick=function(e){e.stopPropagation()};var im=el("img");im.loading="lazy";im.alt=p.cap||"Event photo";im.src=pa.href;pa.appendChild(im);pg.appendChild(pa)});pc.appendChild(pg);d.appendChild(pc)}
+if(i.photos&&i.photos.length){var pc=el("details","sphc");pc.onclick=function(e){e.stopPropagation()};pc.appendChild(el("summary","","Photos ("+i.photos.length+")"+(i.shareWith&&i.shareWith.length?" | shared with Najjuko":"")));var zb=el("a","zipb","Download all ("+i.photos.length+" photos)");zb.href="/momo/work/speaking/zip?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);zb.onclick=function(e){e.stopPropagation()};pc.appendChild(zb);var pg=el("div","sph");i.photos.forEach(function(p){var pa=el("a");pa.href="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY);pa.target="_blank";pa.rel="noopener noreferrer";pa.onclick=function(e){e.stopPropagation()};var im=el("img");im.loading="lazy";im.alt=p.cap||"Event photo";im.src=pa.href;pa.appendChild(im);pg.appendChild(pa)});pc.appendChild(pg);d.appendChild(pc)}if(i.videos&&i.videos.length){var vc=el("details","sphc");vc.onclick=function(e){e.stopPropagation()};vc.appendChild(el("summary","","Videos ("+i.videos.length+")"+(i.shareWith&&i.shareWith.length?" | shared with Najjuko":"")));var vg=el("div","svd");i.videos.forEach(function(p){var v=document.createElement("video");v.controls=true;v.setAttribute("playsinline","");v.preload="metadata";v.src="/momo/work/speaking/file?f="+encodeURIComponent(p.f)+"&key="+encodeURIComponent(KEY)+"#t=0.5";vg.appendChild(v)});vc.appendChild(vg);d.appendChild(vc)}
 if(i.folder)d.appendChild(el("p","","Folder: "+i.folder));if(i.notes)d.appendChild(el("p","","Notes: "+i.notes));
 var sb=el("div","sb"),pdf=el("a","pri","Brief (PDF)");pdf.href="/momo/work/speaking/report?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);pdf.target="_blank";sb.appendChild(pdf);
 var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopPropagation();openForm(i)};sb.appendChild(ed);
@@ -373,6 +375,23 @@ async function photoZip(env, item) {
   return new Response(storedZip(files), { headers: { "Content-Type": "application/zip", "Content-Disposition": 'attachment; filename="' + nm + '_photos.zip"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
+
+// v808: a stored file as a response; raw-byte values (videos) honour Range so a phone can play and seek
+export async function fileResponse(env, kvKey, request, fallbackType) {
+  const r = await env.MEETINGS.getWithMetadata(kvKey, "arrayBuffer"); if (!r || !r.value) return new Response("not found", { status: 404 });
+  const m = r.metadata || {};
+  const txt = (v) => typeof v === "string" ? v : new TextDecoder().decode(v);
+  const bin = m.raw ? (typeof r.value === "string" ? Uint8Array.from(r.value, (c) => c.charCodeAt(0)) : new Uint8Array(r.value)) : Uint8Array.from(atob(txt(r.value)), (c) => c.charCodeAt(0));
+  const h = { "Content-Type": m.type || fallbackType || "application/octet-stream", "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex" };
+  const rg = /^bytes=(\d*)-(\d*)$/.exec((request && request.headers.get("Range")) || "");
+  if (rg && (rg[1] || rg[2])) {
+    let a = rg[1] ? Number(rg[1]) : Math.max(0, bin.length - Number(rg[2])), b = rg[1] && rg[2] ? Math.min(Number(rg[2]), bin.length - 1) : bin.length - 1;
+    if (a >= bin.length || a > b) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + bin.length } });
+    return new Response(bin.slice(a, b + 1), { status: 206, headers: Object.assign(h, { "Content-Range": "bytes " + a + "-" + b + "/" + bin.length, "Content-Length": String(b - a + 1) }) });
+  }
+  return new Response(bin, { headers: Object.assign(h, { "Content-Length": String(bin.length) }) });
+}
+
 export async function speakingRoute(request, env, url, deps) {
   const p = url.pathname, key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -380,9 +399,8 @@ export async function speakingRoute(request, env, url, deps) {
   if (person === "najjuko") {   // v797 - Najjuko sees only the events Kendall shared with her: the event, then its Photos card (read-only)
     const rec = (await readSpk(env, "kendall")) || emptySpk(), mine = rec.items.filter((i) => Array.isArray(i.shareWith) && i.shareWith.includes("najjuko"));
     if (p === "/momo/work/speaking/file" && request.method === "GET") {
-      const f = slug(url.searchParams.get("f") || ""); if (!f || !mine.some((i) => (i.photos || []).some((x) => x.f === f))) return new Response("not found", { status: 404 });
-      const r = await env.MEETINGS.getWithMetadata(SPK_FILE + "kendall_" + f); if (!r || !r.value) return new Response("not found", { status: 404 });
-      return new Response(Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex" } });
+      const f = slug(url.searchParams.get("f") || ""); if (!f || !mine.some((i) => (i.photos || []).concat(i.videos || []).some((x) => x.f === f))) return new Response("not found", { status: 404 });
+      return fileResponse(env, SPK_FILE + "kendall_" + f, request, "image/jpeg");
     }
     if (p === "/momo/work/speaking/zip" && request.method === "GET") { const it = mine.find((i) => i.id === slug(url.searchParams.get("id") || "")); return it && (it.photos || []).length ? photoZip(env, it) : new Response("not found", { status: 404 }); }
     if (p !== "/momo/work/speaking" || request.method !== "GET" || !mine.length) return new Response("not found", { status: 404 });
@@ -390,9 +408,10 @@ export async function speakingRoute(request, env, url, deps) {
     const kq = "key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
     const ev = (i) => '<details class=nsc><summary><b>' + e(i.title) + '</b><span>' + e(whenLabel(i)) + (i.venue ? " | " + e(i.venue) : "") + '</span></summary>'
       + (i.summary ? '<p>' + e(i.summary) + '</p>' : '') + ((i.photos || []).length ? '<details class=nph open><summary>Photos (' + i.photos.length + ')</summary><a class=zipb href="/momo/work/speaking/zip?' + kq + '&id=' + encodeURIComponent(i.id) + '">Download all (' + i.photos.length + ' photos)</a><div class=sph>'
-      + i.photos.map((x) => { const h = "/momo/work/speaking/file?" + kq + "&f=" + encodeURIComponent(x.f); return '<a href="' + h + '" target=_blank rel="noopener noreferrer"><img loading=lazy src="' + h + '" alt="' + e(x.cap || i.title) + '"></a>'; }).join("") + '</div></details>' : '') + '</details>';
+      + i.photos.map((x) => { const h = "/momo/work/speaking/file?" + kq + "&f=" + encodeURIComponent(x.f); return '<a href="' + h + '" target=_blank rel="noopener noreferrer"><img loading=lazy src="' + h + '" alt="' + e(x.cap || i.title) + '"></a>'; }).join("") + '</div></details>' : '') + ((i.videos || []).length ? '<details class=nph><summary>Videos (' + i.videos.length + ')</summary><div class=svd>'
+      + i.videos.map((x) => { const h = "/momo/work/speaking/file?" + kq + "&f=" + encodeURIComponent(x.f); return '<video controls playsinline preload=metadata src="' + h + '#t=0.5"></video>'; }).join("") + '</div></details>' : '') + '</details>';
     const body = '<style>.nsc{background:#fff;border:1px solid #E5DFD3;border-left:4px solid #C5A56A;border-radius:14px;padding:12px 14px;margin:0 0 10px}.nsc>summary{list-style:none;cursor:pointer}.nsc>summary::-webkit-details-marker{display:none}.nsc>summary b{display:block;color:#0A4F4A}.nsc>summary span{color:#5F6B66;font-size:.85rem}'
-      + '.nph{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin-top:10px}.nph>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.zipb{display:inline-block;margin:8px 0 2px;padding:8px 14px;border-radius:999px;background:#0A4F4A;color:#fff;font-weight:600;font-size:.85rem;text-decoration:none}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 2px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}</style>'
+      + '.nph{border:1px solid #EEE7DA;border-radius:12px;padding:8px 10px;margin-top:10px}.nph>summary{cursor:pointer;font-weight:600;color:#0A4F4A}.zipb{display:inline-block;margin:8px 0 2px;padding:8px 14px;border-radius:999px;background:#0A4F4A;color:#fff;font-weight:600;font-size:.85rem;text-decoration:none}.sph{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 2px}.sph img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;background:#EEE7DA}.svd{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 2px}.svd video{width:100%;aspect-ratio:16/9;border-radius:10px;background:#1C2321;display:block}</style>'
       + '<a class=back href="/momo?door=1&' + kq + '">&#8592; Momo</a><h1>Speaking</h1>' + mine.map(ev).join("");
     return new Response(deps.page(key, rk, body), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
@@ -402,7 +421,9 @@ export async function speakingRoute(request, env, url, deps) {
   if (p === "/momo/work/speaking/dna" && request.method === "GET") return J({ dna: (await readDna(env, person)) || cleanDna({}) });
   if (p === "/momo/work/speaking/rec" && request.method === "GET") return J({ rec: (await readSpk(env, person)) || emptySpk() });
   if (p === "/momo/work/speaking/file" && request.method === "GET") {   // v660 - a file for an engagement (PDF or picture), loaded to KV outside git; Kendall's key only
-    const f = slug(url.searchParams.get("f") || ""), r = f ? await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f) : null;
+    const f = slug(url.searchParams.get("f") || "");
+    if (f) { const mm = await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f, "stream"); if (mm && mm.metadata && mm.metadata.raw) { try { await mm.value.cancel(); } catch (x) {} return fileResponse(env, SPK_FILE + person + "_" + f, request); } }
+    const r = f ? await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f) : null;
     if (!r || !r.value) return new Response("not found", { status: 404 });
     const bin = Uint8Array.from(atob(r.value), (c) => c.charCodeAt(0)), m = r.metadata || {};
     return new Response(bin, { headers: { "Content-Type": m.type || "application/pdf", "Content-Disposition": 'inline; filename="' + String(m.name || f).replace(/[^\w. -]/g, "") + '"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
