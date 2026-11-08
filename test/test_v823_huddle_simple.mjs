@@ -31,7 +31,7 @@ const act = (b, deps) => Hd.cardAction(env, Object.assign({ date: "2026-11-09" }
 let c = Hd.cardOut(await Hd.getCard(env, "2026-11-09"));
 ok(c.section_status.theme === "Needs link" && c.section_status.mantra === "Done ✓" && c.section_status.shoutouts === "Done ✓" && c.section_status.tip === "Ready to check", "statuses: needs link; mantra and shout-outs carried; tip suggested");
 ok(c.next_step === "paste this week's YouTube link", "next step in plain words");
-ok(Hd.SLIDE_ORDER.map((r) => r[1]).join("|") === "Cover|Agenda|Clip & pillars|Market|Project of the week|Company updates|Mortgage|Celebrating every sale|Celebrating people & moments|Success tips|Schedule Mon–Sat|Shout-outs|Mantra|Close", "the card lists her slides in her order");
+ok(Hd.SLIDE_ORDER.map((r) => r[1]).join("|") === "Cover|Agenda|Clip & pillars|Market|Project of the week|Company updates|Market Intelligence|Celebrating every sale|Celebrating people & moments|Success tips|Schedule Mon–Sat|Shout-outs|Mantra|Close", "the card lists her slides in her order");
 
 // Theme & clip: one link -> both slides drafted; captions used or the fallback said; the key never leaves
 let r = await act({ action: "theme_link", section: "theme", url: "https://youtu.be/k0GD3tZdf-k" }, { fetch: yfetch(false) });
@@ -49,7 +49,7 @@ ok(r[1].card.section_status.theme === "Done ✓", "Accept: Done ✓");
 ok(projectFrom("Palm Springs\nhttps://www.propertyfinder.ae/x from AED 3.3M", "2026-11-08").error, "portals refused");
 r = await act({ action: "paste", section: "project", text: "Palm Springs\nby Nakheel\nhttps://www.nakheel.com/palm-springs\nVillas from AED 3.8M, 4 and 5 bedroom villas, payment plan 60/40, handover Q4 2028" });
 const pf = r[1].card.extra_slides.project_of_week;
-ok(pf.project_name === "Palm Springs" && pf.project_price_from === "From AED 3.8M" && pf.project_payment_plan === "60/40" && pf.project_handover === "Q4 2028" && /nakheel\.com/.test(pf.project_source), "figures only from the developer's material, with the source");
+ok(pf.project_name === "Palm Springs" && pf.project_price_from === "From AED 3.8M" && pf.project_payment_plan === "60/40" && pf.project_handover === "Q4 2028" && pf.project_units === "4 and 5 bedroom villas" && /nakheel\.com/.test(pf.project_source), "figures only from the developer's material, with the source");
 ok(r[1].card.extra_slides.project_sources.project_price_from && r[1].card.section_status.project === "Ready to check", "each figure carries its source");
 // Mortgage
 r = await act({ action: "paste", section: "mortgage", text: "Emirates NBD: fixed 3.99% for 3 years\nLTV 80% for first-time buyers\nPartner broker: Home Finance Co" });
@@ -90,5 +90,8 @@ const page = await (await Hd.huddleRoute(new Request("https://x/momo/work/huddle
 ok(page.includes("slides ready</b>") && page.includes("openRow(") && page.includes("Nothing to do. This slide is fixed.") && page.includes("Same mantra?") && page.includes("Nothing to do. Thank you, have a great week."), "the list; fixed slides say there is nothing to do");
 ok(page.includes("s YouTube link</label>") && page.includes("Who closed this week?") && page.includes("Paste the MD's week") && page.includes("Project name + developer link or brochure") && page.includes("s suggested tip?</p>") && page.includes("s birthdays and days. Accept?</p>"), "one question per pop-up");
 ok(page.includes("data-back=1>&#8592; Back") && page.includes(">Home</a>") && page.includes("&#8592; Close") && /<summary>Edit details<\/summary>/.test(page) && page.includes("Build huddle"), "Back + Home on every pop-up; Close on the enlarged preview; Edit details hidden; Build huddle");
+const gt = Hd.cleanTopics([{ id: "a", line: "Off-plan sales rose 12%", table: "v_gov_sales", kind: "off-plan" }, { id: "b", line: "JVC rents held", table: "v_gov_rents" }, { id: "c", line: "Plot sales in Dubai South", table: "v_land" }, { id: "d", line: "Top 5 brokers by volume", table: "v_broker_rank" }, { id: "e", line: "Ready resales up", table: "v_gov_sales" }]);
+ok(gt.map((x) => x.group).join() === "Off-plan,Rental,Commercial & plots,Top performers,Secondary" && Hd.MAX_TOPICS === 20, "market options grouped: Off-plan, Secondary, Rental, Commercial & plots, Top performers; up to 20");
+ok(page.includes("Market intelligence: bank, mortgage or partner updates") && page.includes("Top 4 pre-ticked") && page.includes('"Market Intelligence","mortgage"'), "Market Intelligence: the row, the pop-up; market grouped with the top 4 pre-ticked");
 new Function(page.slice(page.indexOf("(function(){")).replace(/<\/script>[\s\S]*$/, "")); ok(true, "the card script parses");
 console.log = console.log; process.stdout.write("test_v823_huddle_simple: " + n + " checks passed\n");

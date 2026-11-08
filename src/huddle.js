@@ -51,7 +51,7 @@ export const SECTIONS = [
   { id: "theme", name: "Theme & clip", slides: [1, 3], prefixes: ["theme", "clip", "motivation", "video", "youtube"], source: "Najjuko (Ali sometimes suggests the clip)" },
   { id: "market", name: "Market", slides: [4, 5, 6, 7], prefixes: ["market"], source: "Najma (read-only) + public sources" },
   { id: "project", name: "Project of the week", slides: [], prefixes: ["project_"], source: "Managing director's choice; developer's own material" },
-  { id: "mortgage", name: "Mortgage & partners", slides: [], prefixes: ["mort_"], source: "Bank / partner updates" },
+  { id: "mortgage", name: "Market Intelligence", slides: [], prefixes: ["mort_"], source: "Bank, mortgage and partner updates" },   // Kendall 8 Nov: the mortgage slide is "Market Intelligence"
   { id: "recognition", name: "Celebrating every sale", slides: [8], prefixes: ["recognition", "recog", "top_performer", "award"], source: "Sales director" },
   { id: "announcements", name: "Company updates", slides: [9], prefixes: ["announcement", "announce", "update", "hr_"], source: "Management / HR" },
   { id: "celebrations", name: "Celebrating our people and our moments", slides: [10], prefixes: ["celebration", "celebrate", "birthday", "bday", "days_to_mark", "holiday"], source: "HR + UAE calendar" },
@@ -327,13 +327,24 @@ const logIt = (c, what) => { c.log = (c.log || []).concat({ at: new Date().toISO
 
 // ---- market topics: one line each, ending with its source; Najma is read-only ----------------------------------------------------------------------------
 export const cleanLine = (s) => String(s == null ? "" : s).replace(/\bvacanc(y|ies)\b/gi, "units on the market").replace(/\s+/g, " ").trim().slice(0, 220);
+// v823 (Kendall 8 Nov) - the market options are grouped: Off-plan, Secondary, Rental, Commercial & plots, Top performers
+export const MARKET_GROUPS = ["Off-plan", "Secondary", "Rental", "Commercial & plots", "Top performers"];
+export function marketGroup(t) {
+  const x = (t.kind + " " + t.table + " " + t.line).toLowerCase();
+  if (/top|performer|agent|broker|leader|ranking/.test(x)) return "Top performers";
+  if (/commercial|office|retail|plot|land|warehouse/.test(x)) return "Commercial & plots";
+  if (/rent|lease|ejari|tenan/.test(x)) return "Rental";
+  if (/off[- ]?plan|offplan|launch/.test(x)) return "Off-plan";
+  return "Secondary";
+}
 export function cleanTopics(list) {
   const out = [], seen = new Set();
   for (const t of Array.isArray(list) ? list : []) {
     if (!t || typeof t !== "object") continue;
     const id = String(t.id || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40) || "t" + (out.length + 1), line = cleanLine(t.line);
     if (!line || seen.has(id)) continue; seen.add(id);
-    out.push({ id, line, table: cleanLine(t.table).slice(0, 80), as_of: dOk(t.as_of) ? t.as_of : "", provisional: !!t.provisional, kind: cleanLine(t.kind).slice(0, 30) });
+    const o = { id, line, table: cleanLine(t.table).slice(0, 80), as_of: dOk(t.as_of) ? t.as_of : "", provisional: !!t.provisional, kind: cleanLine(t.kind).slice(0, 30) };
+    o.group = MARKET_GROUPS.includes(String(t.group || "")) ? String(t.group) : marketGroup(o); out.push(o);   // v823 - grouped so 15-20 options scan on a phone
     if (out.length >= MAX_TOPICS) break;
   }
   return out;
@@ -344,7 +355,7 @@ export function cleanTopics(list) {
 // v823 - her deck, in order (Najjuko's slide-by-slide brief + huddle-template.md): deck position, label, card section, template slide
 // (matches Momo_Huddle_Mockup_v823.html: 9 Company updates, 10 Mortgage (new), 11 Celebrating every sale (new, rec_* fields))
 export const SLIDE_ORDER = [[1, "Cover", "theme", 1], [2, "Agenda", "", 2], [3, "Clip & pillars", "theme", 3], ["4-7", "Market", "market", "4-7"], [8, "Project of the week", "project", "new"], [9, "Company updates", "announcements", 9],
-  [10, "Mortgage", "mortgage", "new"], [11, "Celebrating every sale", "recognition", "new (rec_* fields, template slide 8)"], [12, "Celebrating people & moments", "celebrations", 10], [13, "Success tips", "tip", 11], [14, "Schedule Mon–Sat", "schedule", 12],
+  [10, "Market Intelligence", "mortgage", "new"], [11, "Celebrating every sale", "recognition", "new (rec_* fields, template slide 8)"], [12, "Celebrating people & moments", "celebrations", 10], [13, "Success tips", "tip", 11], [14, "Schedule Mon–Sat", "schedule", 12],
   [15, "Shout-outs", "shoutouts", 13], [16, "Mantra", "mantra", 14], [17, "Close", "mantra", 15]];
 export const WEEKLY = ["theme", "market", "project", "mortgage", "recognition", "announcements", "celebrations", "tip", "schedule"];
 export const DESC = { theme: "This week's theme and video. Paste the YouTube link Ali sent; Momo writes the two slides.", market: "Four market topics for slides 4 to 7. Tick 4.",
@@ -587,7 +598,7 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
   + '.sl2{display:flex;flex-direction:column;gap:8px}.sc2{display:flex;align-items:center;gap:10px;border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:12px;text-align:left;font:inherit;color:inherit;cursor:pointer}.sc2 .t2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.sc2 b{font-size:.95rem}.sc2 small{font-size:.76rem;color:#5F6B66;line-height:1.3}'
   + '.sc2 .bdg{flex:0 0 auto;border-radius:99px;padding:4px 10px;font:600 .72rem "IBM Plex Sans",sans-serif;background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A;white-space:nowrap}.sc2.chk .bdg{background:#fff;color:#0A4F4A;border-color:#0A4F4A}.sc2.done{background:var(--gr);border-color:var(--gr);color:#fff}.sc2.done small{color:#E6F2EC}.sc2.done .bdg{background:#fff;color:var(--gr);border-color:#fff}'
   + '.q1{display:block;font:600 1rem "IBM Plex Sans",sans-serif;color:#1C2321;margin:10px 0 6px}.in1{width:100%;box-sizing:border-box;border:1.5px solid #0A4F4A;border-radius:12px;padding:12px;font:500 1rem "IBM Plex Sans",sans-serif;background:#fff}.ed2{margin:14px 0 4px}.ed2 summary{cursor:pointer;color:#5F6B66;font-size:.86rem}.okline{color:var(--gr);font-weight:600}.lnk{border:0;background:none;color:#0A4F4A;text-decoration:underline;padding:4px 0;font:600 .84rem "IBM Plex Sans",sans-serif}.pvx{display:block;margin:0 0 8px;border:0;border-radius:99px;background:#fff;color:#0A4F4A;font:600 .9rem "IBM Plex Sans",sans-serif;padding:8px 14px}.pvo{flex-direction:column;justify-content:center}'
-  + '.newc{display:inline-block;background:#C9A97A;color:#1F2B44;border-radius:4px;padding:0 5px;font:600 .62rem "IBM Plex Sans",sans-serif;vertical-align:2px}.nm2{flex:0 0 34px;font:400 1.1rem Anton,Impact,sans-serif;color:#1F2B44}.sc2.done .nm2{color:#fff}.spn{display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-1px}@keyframes sp{to{transform:rotate(360deg)}}.btn.alt .spn{border-color:#0A4F4A;border-top-color:transparent}.sug{border:1px solid #E3DDD1;border-radius:12px;padding:6px 10px;margin:4px 0 8px;background:#fff}.srcx{font-size:.7em;color:#8A6F3E}'
+  + '.mgh{font:600 .72rem "IBM Plex Mono",monospace;letter-spacing:.08em;color:#8A6F3E;text-transform:uppercase;margin:12px 0 4px}.newc{display:inline-block;background:#C9A97A;color:#1F2B44;border-radius:4px;padding:0 5px;font:600 .62rem "IBM Plex Sans",sans-serif;vertical-align:2px}.nm2{flex:0 0 34px;font:400 1.1rem Anton,Impact,sans-serif;color:#1F2B44}.sc2.done .nm2{color:#fff}.spn{display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-1px}@keyframes sp{to{transform:rotate(360deg)}}.btn.alt .spn{border-color:#0A4F4A;border-top-color:transparent}.sug{border:1px solid #E3DDD1;border-radius:12px;padding:6px 10px;margin:4px 0 8px;background:#fff}.srcx{font-size:.7em;color:#8A6F3E}'
   + '.sw{display:flex;align-items:center;justify-content:space-between;border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:10px 12px;margin:10px 0;font:500 .86rem "IBM Plex Sans",sans-serif}</style>';
 
 export function cardPage(c, key) {
@@ -672,7 +683,7 @@ function openFields(id,fields){var s=sec(id),src=(HD.sections.filter(function(x)
 function preview(id,keys){var s=sec(id),md=(C.momo||{})[id],ed=C.edition||{},SF=HD.slideFields||{},M=HD.meta||{};
  if(!s.slides.length){var X=C.extra_slides||{},o=id==="project"?X.project_of_week:id==="mortgage"?X.mortgage:null,src=X.project_sources||{},ph2=function(t){return t?e(t):'<span class=phd>[placeholder]</span>'};
   var rows2=id==="shoutouts"?((X.shoutouts||{}).items||[]).map(function(x){return '<li>'+(x.to?'<b>'+e(x.to)+'</b>: ':'')+e(x.message)+'</li>'}).join("")||'<li>Who deserves a shout-out this week? (standing slide)</li>':Object.keys(o||{}).filter(function(k){return !/_notes$|_source$|_headline$|project_name/.test(k)}).map(function(k){return '<li>'+ph2(o[k])+(src[k]?' <small class=srcx>source: developer</small>':'')+'</li>'}).join("");
-  var ttl=id==="shoutouts"?"SHOUT-OUTS":id==="project"?((o&&o.project_name)||"Project of the week"):((o&&o.mort_headline)||"Mortgage & partners");
+  var ttl=id==="shoutouts"?"SHOUT-OUTS":id==="project"?((o&&o.project_name)||"Project of the week"):"Market Intelligence";
   return '<p class=hs style="margin:6px 0 4px">Preview of the slide (tap to enlarge)</p><div class=pvg><div class=pvw><div class=pvt><span class=pve>'+e(s.name)+'</span><span class=pvp>PREVIEW</span></div><div class=pvn>'+e(ttl)+'</div><ul>'+rows2+'</ul>'+(o&&(o.project_source||o.mort_source)?'<div class=pvs>'+e(o.project_source||o.mort_source)+'</div>':'')+'<div class=pvf>CONFIDENTIAL · FN Realty internal use only · '+e(C.week_label)+' · new slide</div></div></div>'}   // v822 - FN palette: navy #1F2B44, gold #C9A97A, blush #F9F1EF, Anton + Inter
  var val=function(k){var v=ed[k];if(Array.isArray(v))return v.join(" · ");return v==null?"":String(v)};
  var ph=function(t){return t?e(t):'<span class=phd>[placeholder]</span>'};
@@ -688,11 +699,13 @@ function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
  function body(){var W=C.market.why||{},h=nav()+'<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
   if(C.market.momo_pending)h+='<div class=mo><label>Momo ranked the topics and pre-ticked 4</label><p>Change any tick, or accept them as they are.</p><button type=button class=btn id=macc>Accept Momo\'s 4</button></div>';
   if(C.market.cp_code||C.market_for_pdf.length)h+='<div class=mo><label>Also done with these 4</label>'+(C.market.cp_code?'<p>Draft market post in your Content Planner ('+e(C.market.cp_code)+'), not published</p>':'')+(C.market_for_pdf.length?'<p>Marked for the team market PDF</p>':'')+'</div>';
-  h+=preview("market",[]);
-  h+='<button type=button class="btn alt" id=mfields>Market slide text (slides 4-7)</button>';
+  var mprev=preview("market",[]);   // v823 - the topics first; the slide previews after them
   if(!T.length)h+='<p class=hs>No topics yet. Your Claude adds 15 to 20 from Najma before the build.</p>';
-  h+='<div class=tp>';T.forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small>'+(on&&W[t.id]?'<small class=why>Why: '+e(W[t.id])+'</small>':'')+'</span></div>'});
-  h+='</div><button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
+  var GRP=["Off-plan","Secondary","Rental","Commercial & plots","Top performers"],gOf=function(t){return t.group||C.market_groups&&C.market_groups[t.id]||"Other"},grp={};T.forEach(function(t){(grp[gOf(t)]=grp[gOf(t)]||[]).push(t)});
+  h+='<p class=hs>'+T.length+' options from the Najma register (read-only), each with its date. Top 4 pre-ticked.</p>';
+  GRP.concat(Object.keys(grp).filter(function(g){return GRP.indexOf(g)<0})).forEach(function(g){if(!grp[g])return;h+='<p class=mgh>'+e(g)+'</p><div class=tp>';grp[g].forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small>'+(on&&W[t.id]?'<small class=why>Why: '+e(W[t.id])+'</small>':'')+'</span></div>'});h+='</div>'});
+  h+=mprev+'<button type=button class="btn alt" id=mfields>Market slide text (slides 4-7)</button>';
+  h+='<button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
   $("shi").querySelectorAll(".tc").forEach(function(d){d.onclick=function(){var id=d.getAttribute("data-t"),i=pick.indexOf(id);if(i>=0)pick.splice(i,1);else if(pick.length<4)pick.push(id);body()}});
   $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)};
   $("shi").querySelectorAll(".pvw").forEach(function(x){x.onclick=function(){var o=document.createElement("div");o.className="pvo";o.innerHTML='<button type=button class=pvx>&#8592; Close</button>'+x.outerHTML;o.lastChild.classList.add("big");o.onclick=function(){o.remove()};document.body.appendChild(o)}});
@@ -706,7 +719,7 @@ function openSec(id){if(id==="market")return openMarket();
   if(d)h+='<p class=mn>'+(d.captions?"Drafted from the clip\'s captions, title and description.":"No captions were available for this clip: drafted from its title and description only.")+'</p>'}
  else if(id==="tip"){h+=(d&&d.lib?'<p class=q1>Use this week\'s suggested tip?</p>':'<p class=q1>Your tip</p>')}
  else if(id==="celebrations"){h+='<p class=q1>Here are this week\'s birthdays and days. Accept?</p>'+(md&&(md.birthdays||[]).length?'<div class=mo><label>Birthdays</label>'+md.birthdays.map(function(x){return '<label class=bdt><input type=checkbox data-bd="'+e(x.key)+'"'+(x.on?" checked":"")+'> <b>'+e(x.name)+'</b> <small>'+e(x.when)+'</small></label>'}).join("")+'</div>':'<p class=hs>No birthdays on your list this week.</p>')}
- else{var Q={recognition:["Who closed this week?","Name, deal type, project or area - one per line"],announcements:["Paste the updates","All of them in one box: Momo sorts them by department"],project:["Project name + developer link or brochure","Project name on the first line, then the developer's link or brochure / price-list text"],mortgage:["Bank / partner updates","Paste what the banks and partners sent"],schedule:["Paste the MD's week","One line per item, e.g. Tuesday 10:00 Emaar briefing at their office (mandatory). Add a line: Focus: ..."],shoutouts:["Any shout-outs to add?","Name or department: message (optional)"]}[id]||["Paste the update",""];
+ else{var Q={recognition:["Who closed this week?","Name, deal type, project or area - one per line"],announcements:["Paste the updates","All of them in one box: Momo sorts them by department"],project:["Project name + developer link or brochure","Project name on the first line, then the developer's link or brochure / price-list text"],mortgage:["Market intelligence: bank, mortgage or partner updates","Paste what the banks and partners sent"],schedule:["Paste the MD's week","One line per item, e.g. Tuesday 10:00 Emaar briefing at their office (mandatory). Add a line: Focus: ..."],shoutouts:["Any shout-outs to add?","Name or department: message (optional)"]}[id]||["Paste the update",""];
   h+='<label class=q1 for=pst>'+e(Q[0])+'</label>';
   if(id==="recognition"&&(C.sales_suggest||[]).length)h+='<div class=sug>'+C.sales_suggest.map(function(x,i){return '<label class=bdt><input type=checkbox data-sug="'+i+'"> '+e(x)+'</label>'}).join("")+'<p class=mn>From your work log: tick to add.</p></div>';
   h+='<textarea id=pst class=in1 rows=5 placeholder="'+e(Q[1])+'">'+e((d&&d.text)||"")+'</textarea><button type=button class=btn id=pgo>'+(id==="shoutouts"?"Add the shout-outs":"Draft the slide")+'</button>'+(id==="shoutouts"?'<button type=button class="btn alt" id=snone>None this week</button>':'');

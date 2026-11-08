@@ -48,7 +48,7 @@ ok(r.ok, "the page's actions go through the huddle api");
 // the live preview in every section sheet (presenter view from current values; tap to enlarge; last built slide when there is one)
 page = await (await hr("/momo/work/huddle?key=K&date=2026-11-09")).text();
 const js = page.slice(page.indexOf("(function(){"));
-ok(/function preview\(id,keys\)/.test(js) && /h\+=preview\(id,keys\)/.test(js) && /h\+=preview\("market",\[\]\)/.test(js), "every section and the market sheet show the preview");
+ok(/function preview\(id,keys\)/.test(js) && /h\+=preview\(id,keys\)/.test(js) && /mprev=preview\("market",\[\]\)/.test(js), "every section and the market sheet show the preview");
 ok(/Preview of the slide/.test(js) && /className="pvo"/.test(js) && /Last built slide/.test(js) && /PREVIEW/.test(js), "tap to enlarge; the built slide when available (v822: FN-palette previews, birthdays via cel_bday_body)");
 new Function(js.replace(/<\/script>[\s\S]*$/, "")); ok(true, "the card script parses");
 ok(!LOGS.join("\n").match(/Ruzanna|Testy|Zed Example|New Starter/), "no birthday name in any log line");

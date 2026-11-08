@@ -15,7 +15,7 @@ export function projectFrom(text, nowDay) {
   const url = (/(https?:\/\/[^\s]+)/.exec(t) || [])[1] || "";
   const plan = (/\b(\d{1,2}\s*\/\s*\d{1,2}(?:\s*\/\s*\d{1,2})?)\s*(?:payment plan)?/i.exec(t) || [])[1] || "";
   const ho = (/\b(?:handover|completion)\b[^.\n]{0,20}?\b((?:Q[1-4]\s*)?20\d\d)\b/i.exec(t) || [])[1] || "";
-  const units = (/\b((?:\d|studio)[^.\n]{0,40}?(?:bedroom|BR|villas?|townhouses?|apartments?)[^.\n]{0,30})/i.exec(t) || [])[1] || "";
+  const units = (/(?:^|[\s,(])((?:studio|\d)(?:\s*(?:,|and|&|to|-)\s*\d)*\s*(?:-?\s*bed(?:room)?s?|BR)\b(?:\s+(?:villas?|townhouses?|apartments?|homes?))?)/i.exec(t) || [])[1] || "";   // "4 and 5 bedroom villas"
   const dev = (/\bby\s+([A-Z][A-Za-z&. ]{2,30})/.exec(t) || [])[1] || "";
   const src = url ? "Developer material: " + url + " (as of " + nowDay + ")" : "Developer material pasted by Najjuko (" + nowDay + ")";
   const v = { project_name: clip(lines[0] || "", 40), project_developer: clip(dev, 40), project_price_from: clip(money(t), 30), project_payment_plan: plan ? clip(plan.replace(/\s+/g, ""), 60) : "",
@@ -27,7 +27,7 @@ export function mortgageFrom(text, project, nowDay) {
   const t = String(text || ""), lines = t.split(/\n+/).map((l) => l.trim()).filter(Boolean);
   const partners = lines.filter((l) => /\b(bank|finance|mortgage|partner|broker|islamic|NBD|ENBD|ADCB|FAB|Mashreq|DIB|RAK|CBD|HSBC|Standard Chartered)\b/i.test(l));
   const market = lines.filter((l) => /\b(rate|%|EIBOR|fixed|variable|LTV|loan[- ]to[- ]value|tenor|years?)\b/i.test(l));   // a bank line with a rate is both a partner and a market option
-  const v = { mort_headline: "Financing that helps close this week", mort_dev_plan: project && project.project_payment_plan ? clip((project.project_name || "Project of the week") + ": " + project.project_payment_plan + " (" + (project.project_source || "developer") + ")", 120) : "",
+  const v = { mort_headline: "Market Intelligence", mort_dev_plan: project && project.project_payment_plan ? clip((project.project_name || "Project of the week") + ": " + project.project_payment_plan + " (" + (project.project_source || "developer") + ")", 120) : "",
     mort_market: clip(market.join(" · "), 300), mort_partners: clip(partners.join(" · "), 300), mort_source: clip("Bank / partner updates pasted by Najjuko (" + nowDay + ")" + (project && project.project_source ? "; payment plan: " + project.project_source : ""), 300), mort_notes: clip(t, 1200) };
   return { values: v };
 }
