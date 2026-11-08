@@ -354,6 +354,7 @@ export async function campWebhook(env, body, deps) {
   const out = { statuses: 0, optouts: 0, replies: 0, taps: 0, stopped: "" };
   try {
     const pv = await campPreview(env, body, deps); if (pv && pv.consumed) { out.consumed = true; out.preview = pv; return out; }
+    const oi = await campOptIn(env, body, deps); if (oi && oi.consumed) { out.consumed = true; out.optin = oi; return out; }   // v821
     const now = (deps && deps.now) || Date.now();
     for (const en of (body && body.entry) || []) for (const ch of (en && en.changes) || []) {
       if (!ch || !ch.value || !ch.field || ch.field === "messages") continue;
@@ -1250,6 +1251,78 @@ export async function campPreview(env, body, deps) {
   }
   await send(pvControls(f, d, ""));
   return { consumed: true, sent };
+}
+
+// ---------- v821 (Kendall 8 Nov 2026: "start the wa.me QR route") - OWNERS MESSAGE FIRST ----------
+// Meta's per-person marketing cap (131049) held back cold templates. An owner who scans Najjuko's QR sends the prefilled text to the DESK number;
+// their own message opens the 24-hour customer-service window, so the s1 opener goes as ordinary session messages (picture, then the question
+// with its options) and the flow continues exactly as before. Counted under the pseudo-campaign "pja-optin" (status "optin": the minute tick
+// never sends for it, no follow-up template, not in camp_sent24). Consent = their own message, quoted, with the date.
+// Acts ONLY when: the message is text, arrives on the desk number, matches the keywords, the sender is not Najjuko / Kendall / a preview or
+// team number, is not opted out (opted out: consumed, nothing sent), and is not already in a flow from the last 7 days. CAMP_OPTIN="off" stops it.
+export const OPTIN_CID = "pja-optin";
+const OPTIN_KW = /palm\s*jebel\s*ali|\bfrond\b|نخلة\s*جبل\s*علي/i;
+export const optInMatch = (t) => { t = String(t || ""); return t.length <= 300 && OPTIN_KW.test(t); };
+export function optInFrond(t) { const m = /(?:\bfrond|سعفة|السعفة)\s*([a-p])(?![a-z])/i.exec(String(t || "")); return m ? m[1].toLowerCase() : ""; }
+const OPTIN_WHY = "you messaged me about Palm Jebel Ali";
+export function optInPayloads(f, cid, k, imgLink, brn) {
+  const n = f.nodes[f.start], to = DIG(k.e164), out = [];
+  if (imgLink) out.push({ messaging_product: "whatsapp", to, type: "image", image: { link: imgLink } });
+  const vals = { name: firstName(k.name), why: OPTIN_WHY, brn: brn || NAJ_BRN };
+  let text = String(n.body || n.text || ""); (n.vars || ["name"]).forEach((v, i) => { text = text.split("{{" + (i + 1) + "}}").join(vals[v] != null ? vals[v] : (v.charAt(0) === "=" ? v.slice(1) : "")); });
+  text = text.slice(0, 1024); const opts = n.buttons || n.rows || [];
+  if (opts.length <= 3 && opts.every((b) => b.title.length <= 20)) out.push({ messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "button", body: { text }, action: { buttons: opts.map((b, i) => ({ type: "reply", reply: { id: "cf:" + cid + ":" + f.start + ":" + i, title: b.title } })) } } });
+  else out.push({ messaging_product: "whatsapp", to, type: "interactive", interactive: { type: "list", body: { text }, action: { button: "Choose an answer", sections: [{ title: "Your answer", rows: opts.slice(0, 10).map((b, i) => Object.assign({ id: "cf:" + cid + ":" + f.start + ":" + i, title: shortTitle(b.title, 24) }, b.title.length > 24 ? { description: b.title.slice(0, 72) } : {})) }] } } });
+  return out;
+}
+async function optInCampaign(env, flowId, now) {
+  let c = await getJ(env, "camp_" + OPTIN_CID, null);
+  if (!c) { c = { id: OPTIN_CID, name: "Palm Jebel Ali owners (wa.me opt-in)", status: "optin", flow: flowId, phone: "desk", tags: [OPTIN_CID], vars: [], template: "", brn: NAJ_BRN, stop_forgets: true, created: new Date(now).toISOString(), note: "Owners who messaged first (QR / wa.me link). Free-form replies inside their own 24-hour window; never sent by the minute tick." };
+    await putJ(env, "camp_" + OPTIN_CID, c); const ix = await getJ(env, "camp_index", []); if (!ix.includes(OPTIN_CID)) { ix.push(OPTIN_CID); await putJ(env, "camp_index", ix); } }
+  return c;
+}
+export async function campOptIn(env, body, deps) {
+  if (env.CAMP_OPTIN === "off" || env.CAMPAIGNS_OFF === "1") return null;
+  const now = (deps && deps.now) || Date.now();
+  const val = body && body.entry && body.entry[0] && body.entry[0].changes && body.entry[0].changes[0] && body.entry[0].changes[0].value;
+  const msg = val && val.messages && val.messages[0]; if (!msg || msg.type !== "text") return null;
+  const pid = DIG(val.metadata && val.metadata.phone_number_id); if (!pid || pid !== DIG(env.WA_DESK_PHONE_ID)) return null;   // the desk number only
+  const txt = String((msg.text && msg.text.body) || "").trim(); if (!optInMatch(txt)) return null;
+  const d = DIG(msg.from); if (!d) return null;
+  const team = String(env.CAMP_OPTIN_EXCLUDE || "").split(",").map(DIG).filter(Boolean);
+  if (previewAllowed(env, d) || team.includes(d)) return null;   // Najjuko, Kendall, preview and team numbers: their chats stay as they are
+  const flowId = String(env.CAMP_OPTIN_FLOW || "pja-owners"), f = await getJ(env, "camp_flow_" + flowId, null); if (!f || !f.nodes || !f.nodes[f.start]) return null;
+  if (msg.id) { const sk = "camp_optin_seen_" + msg.id; if (await env.MEETINGS.get(sk)) return { consumed: true, repeat: true }; await env.MEETINGS.put(sk, "1", { expirationTtl: 3 * 86400 }); }
+  if (await isOptedOut(env, d)) return { consumed: true, opted_out: true };   // opted out: nothing is sent
+  const ck = "camp_contact_" + d, prev = await getJ(env, ck, null);
+  if (prev && prev.opted_out) return { consumed: true, opted_out: true };
+  if (prev && prev.last_camp) { const st = await getJ(env, "camp_state_" + prev.last_camp + "_" + d, null), t0 = Date.parse((st && st.at) || prev.optin_at || prev.last_mkt || "") || 0;
+    if (now - t0 < 7 * DAY) return null; }   // already in a flow: the ordinary reply handling answers them
+  const c = await optInCampaign(env, flowId, now), at = new Date(now).toISOString(), date = dubaiDate(now), frond = optInFrond(txt);
+  const pname = String((val.contacts && val.contacts[0] && val.contacts[0].profile && val.contacts[0].profile.name) || "").slice(0, 80);
+  const consent = { text: "Messaged Najjuko's WhatsApp first (wa.me opt-in): \"" + txt.slice(0, 300) + "\"", date, by: "self, wa.me opt-in", import_id: "optin", msg_id: msg.id ? String(msg.id).slice(0, 80) : undefined };
+  const tags = ["pja-optin"].concat(frond ? ["pja-frond-" + frond] : []);
+  let k;
+  if (prev) { k = Object.assign({}, prev, { tags: [...new Set((prev.tags || []).concat(tags))], consent, consent_history: (prev.consent_history || []).concat(prev.consent ? [prev.consent] : []).slice(-5), optin_at: at });
+    if (!k.name && pname) k.name = pname; delete k.removed; }
+  else { k = { e164: "+" + d, name: pname, company: "", role: "", source: "wa.me opt-in", tags, consent, added: at, optin_at: at };
+    const ix = await getJ(env, "camp_contact_index", []); if (!ix.includes(d)) { ix.push(d); await putJ(env, "camp_contact_index", ix); } }
+  const ol = await getJ(env, "camp_optin_log", []); ol.unshift({ at, d4: d.slice(-4), frond: frond || undefined, text: txt.slice(0, 120), fresh: !prev }); await putJ(env, "camp_optin_log", ol.slice(0, 1000));
+  const imgKey = String(env.CAMP_OPTIN_IMG || "tplhdr_naj_pja_intro"), img = (await env.MEETINGS.get("img_" + imgKey)) != null ? originOf(env, deps) + "/img/" + imgKey : "";
+  const f2 = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", sent = [];
+  for (const p of optInPayloads(f, c.id, k, img, c.brn)) {
+    let ok = false, w = "", code = 0;
+    try { const r = await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(p) });
+      const j = await r.json().catch(() => ({})); w = (j.messages && j.messages[0] && j.messages[0].id) || ""; ok = r.ok && !!w; code = Number(j.error && j.error.code) || 0; } catch (e) {}
+    sent.push({ type: p.type === "interactive" ? p.interactive.type : p.type, ok, code: code || undefined });
+    if (ok) { await putJ(env, "camp_msg_" + w, { cid: c.id, d, at, st: "sent", optin: true, api: "session" }); await statusRow(env, w, { cid: c.id, d, sent: at, optin: true });
+      const L = await getJ(env, "camp_msgs_" + c.id, []); L.push(w); await putJ(env, "camp_msgs_" + c.id, L.slice(-20000)); if (p.type === "interactive") k.last_wamid = w; }
+  }
+  const okN = sent.filter((s) => s.ok).length;
+  k.last_camp = c.id; if (okN) k.last_optin_sent = at; await putJ(env, ck, k);
+  await putJ(env, "camp_state_" + c.id + "_" + d, { path: [], node: f.start, at, optin: true });
+  await bump(env, c.id, (x) => { x.sent += okN; x.failed += sent.length - okN; x.optins = (x.optins || 0) + 1; x.replies += 1; x.day[date] = (x.day[date] || 0) + okN; x.rday = x.rday || {}; x.rday[date] = (x.rday[date] || 0) + 1; if (frond) { x.fronds = x.fronds || {}; x.fronds[frond] = (x.fronds[frond] || 0) + 1; } });
+  return { consumed: true, cid: c.id, fresh: !prev, frond, sent };
 }
 
 // ---------- v816 (Kendall 8 Nov): WHO GETS THIS and CONTACTS - owner only (isCampOwner), Back + Home, cards at 375 px ----------
