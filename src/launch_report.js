@@ -17,6 +17,7 @@
 
 import puppeteer from "@cloudflare/puppeteer";
 import { DNA_TL_ART } from "./dna_timeline_art.js";   // v805b
+import { DNA_HIST_ART, DEV_LOGOS } from "./dna_history_art.js";   // v805c
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nf = (v) => Math.round(Number(v) || 0).toLocaleString("en-US");
@@ -84,7 +85,7 @@ const picsOf = (r, e) => ((e && e.pics) || []).filter((p) => p && safePic(p.url)
 // v805 (Kendall 8 Nov: "that map ... that's horrible ... we have Esri ... base maps"). Under the pins: Esri's light grey canvas and its
 // reference labels (public export service), fetched when the report is built and embedded, covering MAP_R km either side of the pin. The
 // pin's own point comes from the 04:00 job (e.lat / e.lon); with no point the old ring diagram is drawn.
-export const MAP_R = 6;
+export const MAP_R = 6, CITY_R = 32, DXB = [25.13, 55.27];   // Dubai inset: 32 km either side of the city centre
 const MW = 500, MH = 290;
 function mercBox(lat, lon, rKm) {
   const x = lon * 20037508.34 / 180, y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;
@@ -92,8 +93,8 @@ function mercBox(lat, lon, rKm) {
   return [x - hx, y - hy, x + hx, y + hy].map((v) => v.toFixed(1)).join(",");
 }
 const b64 = (buf) => { let s = ""; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
-export async function esriLayer(svc, lat, lon) {
-  const q = new URLSearchParams({ bbox: mercBox(lat, lon, MAP_R), bboxSR: "3857", imageSR: "3857", size: MW * 2 + "," + MH * 2, format: "png32", transparent: "true", f: "image" });
+export async function esriLayer(svc, lat, lon, rKm) {
+  const q = new URLSearchParams({ bbox: mercBox(lat, lon, rKm || MAP_R), bboxSR: "3857", imageSR: "3857", size: MW * 2 + "," + MH * 2, format: "png32", transparent: "true", f: "image" });
   const r = await fetch("https://services.arcgisonline.com/arcgis/rest/services/" + svc + "/MapServer/export?" + q, { cf: { cacheTtl: 86400 * 30, cacheEverything: true } });
   if (!r.ok || !/image/.test(r.headers.get("content-type") || "")) return null;
   return "data:image/png;base64," + b64(await r.arrayBuffer());
@@ -104,6 +105,8 @@ export async function addMaps(rows, data) {
     try {
       const [base, ref] = await Promise.all([esriLayer("Canvas/World_Light_Gray_Base", +e.lat, +e.lon), esriLayer("Canvas/World_Light_Gray_Reference", +e.lat, +e.lon)]);
       if (base) e._map = { base, ref };
+      const city = await esriLayer("World_Street_Map", DXB[0], DXB[1], CITY_R);   // the Dubai-wide inset
+      if (city) e._city = city;
     } catch (x) {}
   }));
 }
@@ -129,6 +132,15 @@ export function mapSvg(e) {
     o += '<line x1="' + (ax - dx * 24).toFixed(1) + '" y1="' + (ay - dy * 24).toFixed(1) + '" x2="' + ax.toFixed(1) + '" y2="' + ay.toFixed(1) + '" stroke="' + NAVY + '" stroke-width="3"/>'
       + '<circle cx="' + ax.toFixed(1) + '" cy="' + ay.toFixed(1) + '" r="4" fill="' + NAVY + '"/>'
       + '<text x="' + Math.min(Math.max(ax - dx * 34, 50), W - 50).toFixed(1) + '" y="' + Math.min(Math.max(ay - dy * 34 + 4, 16), H - 30).toFixed(1) + '" font-size="12" font-weight="700" text-anchor="middle" fill="' + NAVY + '">' + esc(/Burj/.test(m.name) ? "Burj Khalifa" : "Airport") + "</text>";
+  }
+  if (e && e._city) {   // v805c: the whole of Dubai, the launch marked, top-left
+    const iw = 210, ih = 122, ix = 8, iy = 8, ksx = iw / (2 * CITY_R), ksy = ih / (2 * CITY_R * MH / MW);
+    const dxk = (e.lon - DXB[1]) * 111.32 * Math.cos(DXB[0] * Math.PI / 180), dyk = (e.lat - DXB[0]) * 110.57;
+    const icx = Math.max(ix + 6, Math.min(ix + iw - 6, ix + iw / 2 + dxk * ksx)), icy = Math.max(iy + 6, Math.min(iy + ih - 20, iy + ih / 2 - dyk * ksy));
+    o += '<rect x="' + (ix - 2) + '" y="' + (iy - 2) + '" width="' + (iw + 4) + '" height="' + (ih + 4) + '" rx="8" fill="#fff" stroke="' + NAVY + '" stroke-width="1.5"/>'
+      + '<defs><clipPath id=ic><rect x="' + ix + '" y="' + iy + '" width="' + iw + '" height="' + ih + '" rx="6"/></clipPath></defs><image clip-path="url(#ic)" href="' + e._city + '" x="' + ix + '" y="' + iy + '" width="' + iw + '" height="' + ih + '" preserveAspectRatio="none"/>'
+      + '<circle cx="' + icx + '" cy="' + icy + '" r="7" fill="' + GOLD + '" stroke="' + NAVY + '" stroke-width="2.5"/>'
+      + '<rect x="' + ix + '" y="' + (iy + ih - 16) + '" width="58" height="16" fill="' + NAVY + '"/><text x="' + (ix + 5) + '" y="' + (iy + ih - 4) + '" font-size="11" font-weight="700" fill="#fff">DUBAI</text>';
   }
   o += '<circle cx="' + cx + '" cy="' + cy + '" r="10" fill="' + GOLD + '" stroke="' + NAVY + '" stroke-width="3"/><circle cx="' + cx + '" cy="' + cy + '" r="3" fill="' + NAVY + '"/>';
   const kx = W - 34, ky = 40;   // compass
@@ -228,6 +240,24 @@ export function dnaTimeline(name, d) {
     + '<div class=dsrc2>Kind of home from each project\'s own off-plan sales. Villa projects often register no unit count until handover. Planned dates can move.</div></div>';
 }
 
+// v805c (Kendall 8 Nov: "get rid of the Sobha card ... a timeline with only 5 maximum that shows when the company started and kind of the
+// key years ... throw in the Sobha logo"). Five milestones (launch_dev_dna.milestones: founded where hand-checked, then the projects
+// register's first project, first handover, largest launch, homes-handed-over mark or busiest year); the headline register numbers sit in
+// one line under the name. Artwork made through the image API, decoration only; every year and word is laid over it here.
+const HX = [11, 30.5, 50, 69.5, 89];
+export function dnaHistory(name, d) {
+  if (!d) return "";
+  const ms = (d.milestones || []).slice(0, 5), logo = DEV_LOGOS[normDev(name)];
+  const yr = (ms[0] && ms[0].year) || String(d.first_project_start || "").slice(0, 4);
+  const facts = [yr ? "Since " + yr : "", nf(d.projects_total) + " projects on the Dubai register", nf(d.registered_units_finished) + " homes handed over", nf(d.registered_units_live) + " in build"].filter(Boolean).join("  ·  ");
+  const pos = ms.length === 5 ? HX : ms.length === 4 ? [11, 37, 63, 89] : ms.length === 3 ? [11, 50, 89] : [11, 89];
+  const top = ms.map((m, i) => '<div class=hy style="left:' + pos[i] + '%">' + m.year + "</div>").join("");
+  const bot = ms.map((m, i) => '<div class=hc style="left:' + pos[i] + '%"><b>' + esc(m.title) + "</b>" + (m.detail ? "<i>" + esc(m.detail) + "</i>" : "") + "</div>").join("");
+  return '<div class=hw><div class=hh>' + (logo ? '<img class=hl src="' + logo + '" alt="">' : "") + '<div><span>DEVELOPER DNA</span><h3>' + esc(name) + "</h3><p>" + esc(facts) + "</p></div></div>"
+    + (ms.length ? '<div class=hb><div class=hys>' + top + '</div><img src="' + DNA_HIST_ART + '" alt=""><div class=hcs>' + bot + "</div></div>" : "")
+    + '<div class=dsrc2>Milestones from the Dubai Land Department projects register' + (ms.some((m) => m.kind === "founded") ? "; founding year from the group's own published history" : "") + ". As of " + esc(dSay(d.as_of)) + ".</div></div>";
+}
+
 export function coverPage(rows, data, title, sub, total, by, dna) {
   const head = '<div class=chd><img class=lgs src="najma_logo.png" alt="Najma"><div><div class=kick>N A J M A &nbsp; L A U N C H &nbsp; R E P O R T</div><div class=hs>' + esc(sub) + "</div></div></div>";
   if (rows.length === 1) {
@@ -239,7 +269,7 @@ export function coverPage(rows, data, title, sub, total, by, dna) {
       + (p ? '<div class=chero><img src="' + esc(p.url) + '" alt=""><span class=cr>Image: ' + esc(p.credit || (e && e.credit) || "") + "</span></div>" : '<div class="chero none"><span>' + esc(String(r.developer || "?").slice(0, 1)) + "</span></div>")
       + '<div class=ctt><h1>' + esc(r.project) + "</h1>" + (price ? "<div class=pr>" + esc(price) + "</div>" : "") + "</div>"
       + '<div class=csb>' + esc([r.developer, r.area].filter(Boolean).join(" · ")) + "</div><div class=chips>" + chips + "</div>"
-      + (d ? dnaPanel(r.developer, d) + dnaTimeline(r.developer, d) : '<div class=dna><div class=dh><span>DEVELOPER DNA</span><h3>' + esc(r.developer || "Developer") + "</h3><i>No register record matched this developer yet.</i></div></div>")
+      + (d ? dnaHistory(r.developer, d) + dnaTimeline(r.developer, d) : '<div class=dna><div class=dh><span>DEVELOPER DNA</span><h3>' + esc(r.developer || "Developer") + "</h3><i>No register record matched this developer yet.</i></div></div>")
       + footer(1, total, by) + "</section>";
   }
   const cards = rows.map((r, i) => {
@@ -280,6 +310,9 @@ export const REPORT_CSS = '@page{size:1080px 1920px;margin:0}*{box-sizing:border
   + '.tlb{position:relative;margin-top:8px}.tlb img{width:100%;display:block}.tlcs{position:relative;height:150px}.tlc{position:absolute;top:4px;transform:translateX(-50%);width:19%;text-align:center}'
   + '.tly{font:700 30px Fraunces,Georgia,serif;color:' + NAVY + ';margin-top:-6px}.tlc p{margin:4px 0 0;font-size:16px;line-height:1.25;color:' + INK + '}.tlc b{font:700 20px Fraunces,Georgia,serif;color:#0A4F4A}.tlc i{display:block;font-style:normal;font-size:13px;color:' + MUTE + '}.tln{color:' + MUTE + ';font-size:15px}'
   + '.dsrc2{font-size:13px;color:' + MUTE + ';margin-top:6px}'
+  + '.hw{margin-top:18px;background:#fff;border:2px solid ' + GOLD + ';border-radius:22px;padding:18px 22px 12px}.hh{display:flex;align-items:center;gap:18px}.hl{height:62px;width:auto}.hh span{font:600 16px "IBM Plex Sans",sans-serif;letter-spacing:.18em;color:' + GOLD + '}.hh h3{font:700 38px Fraunces,Georgia,serif;color:' + NAVY + ';margin:0}.hh p{margin:2px 0 0;font-size:18px;color:#0A4F4A;font-weight:600}'
+  + '.hb{position:relative;margin-top:6px}.hb img{width:100%;display:block;mix-blend-mode:multiply}.hys{position:relative;height:40px}.hy{position:absolute;bottom:-6px;transform:translateX(-50%);font:700 30px Fraunces,Georgia,serif;color:' + NAVY + '}'
+  + '.hcs{position:relative;height:96px}.hc{position:absolute;top:2px;transform:translateX(-50%);width:19.5%;text-align:center}.hc b{display:block;font-size:16px;line-height:1.2;color:#0A4F4A}.hc i{display:block;font-style:normal;font-size:14px;line-height:1.2;color:' + MUTE + ';margin-top:3px}'
   + '@media print{.bar{display:none}body{background:none}.pg{margin:0}}';
 
 const ZOOM_JS = '<script>(function(){function z(){var s=Math.min(1,(window.innerWidth-8)/1080);document.querySelectorAll(".pg").forEach(function(p){p.style.zoom=s})}z();addEventListener("resize",z)})()</script>';
