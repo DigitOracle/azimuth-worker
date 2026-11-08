@@ -85,7 +85,7 @@ const picsOf = (r, e) => ((e && e.pics) || []).filter((p) => p && safePic(p.url)
 // v805 (Kendall 8 Nov: "that map ... that's horrible ... we have Esri ... base maps"). Under the pins: Esri's light grey canvas and its
 // reference labels (public export service), fetched when the report is built and embedded, covering MAP_R km either side of the pin. The
 // pin's own point comes from the 04:00 job (e.lat / e.lon); with no point the old ring diagram is drawn.
-export const MAP_R = 6, CITY_R = 32, DXB = [25.13, 55.27];   // Dubai inset: 32 km either side of the city centre
+export const MAP_R = 6, NEAR_R = 3.5, CITY_R = 32, DXB = [25.13, 55.27];   // Dubai inset: 32 km either side of the city centre
 const MW = 500, MH = 290;
 function mercBox(lat, lon, rKm) {
   const x = lon * 20037508.34 / 180, y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 20037508.34 / Math.PI;
@@ -103,8 +103,8 @@ export async function addMaps(rows, data) {
   await Promise.all(rows.map(async (r) => {
     const e = data[r.key]; if (!e || !(Number(e.lat) && Number(e.lon)) || e._map) return;
     try {
-      const [base, ref] = await Promise.all([esriLayer("Canvas/World_Light_Gray_Base", +e.lat, +e.lon), esriLayer("Canvas/World_Light_Gray_Reference", +e.lat, +e.lon)]);
-      if (base) e._map = { base, ref };
+      const base = await esriLayer("World_Street_Map", +e.lat, +e.lon, NEAR_R);   // v807: the colour street map, neighbourhood
+      if (base) e._map = { base };
       const city = await esriLayer("World_Street_Map", DXB[0], DXB[1], CITY_R);   // the Dubai-wide inset
       if (city) e._city = city;
     } catch (x) {}
@@ -120,6 +120,22 @@ const PIN_G = {
   c: '<path d="M3 9.5L12 5l9 4.5-9 4.5z"/><path d="M7 11.5v4c0 1.5 2.5 2.5 5 2.5s5-1 5-2.5v-4"/>',
 };
 const pinBadge = (k, x, y, r, col) => '<g transform="translate(' + x.toFixed(1) + " " + y.toFixed(1) + ')"><circle r="' + (r + 2) + '" fill="#fff"/><circle r="' + r + '" fill="' + col + '"/><g transform="translate(' + (-r * 0.72) + " " + (-r * 0.72) + ") scale(" + (r * 1.44 / 24).toFixed(3) + ')" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + PIN_G[k] + "</g></g>";
+
+// v807: two colour maps, no detail
+function pinSvg(x, y, r) { return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (r + 6) + '" fill="' + GOLD + '" fill-opacity=".28"/><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + r + '" fill="' + GOLD + '" stroke="' + NAVY + '" stroke-width="3"/><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (r / 3) + '" fill="' + NAVY + '"/>'; }
+export function mapsTwo(e) {
+  if (!e || !(e._map || e._city)) return '<div class=nomap>No map point for this launch yet.</div>';
+  const W = MW, H = MH, one = (img, cap, px, py) => '<figure class=m2><svg viewBox="0 0 ' + W + " " + H + '" width="100%" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="c' + cap.length + '"><rect width="' + W + '" height="' + H + '" rx="12"/></clipPath></defs><g clip-path="url(#c' + cap.length + ')"><image href="' + img + '" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/></g>' + pinSvg(px, py, 9) + '</svg><figcaption>' + cap + "</figcaption></figure>";
+  let o = "";
+  if (e._city) {
+    const ksx = W / (2 * CITY_R), ksy = H / (2 * CITY_R * MH / MW);
+    const dxk = (e.lon - DXB[1]) * 111.32 * Math.cos(DXB[0] * Math.PI / 180), dyk = (e.lat - DXB[0]) * 110.57;
+    o += one(e._city, "Where it sits in Dubai", Math.max(12, Math.min(W - 12, W / 2 + dxk * ksx)), Math.max(12, Math.min(H - 12, H / 2 - dyk * ksy)));
+  }
+  if (e._map) o += one(e._map.base, "The neighbourhood", W / 2, H / 2);
+  return o + '<div class=m2s>Maps: Esri, HERE, Garmin, OpenStreetMap contributors. Pin: ' + (e.pin_basis === "project" ? "the registered project point" : "the area centre") + ".</div>";
+}
+
 export function mapSvg(e) {
   const W = 500, H = 290, cx = W / 2, cy = H / 2, M = e && e._map, sc = M ? (W / 2) / MAP_R : (H / 2 - 6) / 3.2;
   if (!e || !e.pin_basis) return '<div class=nomap>No map point for this launch yet.</div>';
@@ -193,7 +209,7 @@ export function launchPage(r, e, n, total, sub, by) {
     + '<div class=tls>' + tiles + "</div>"
     + '<div class="tl wide">' + I(IC.note) + '<div><b>STATUS AND NOTES</b><p>' + esc(notes) + "</p></div></div>"
     + (snaps.length ? '<div class=sn>' + snaps.map((p) => '<figure><img src="' + esc(p.url) + '" alt=""><figcaption><b>' + (p.kind === "instagram" ? "From the post" : "Frame from the video") + '</b><span>Image: ' + esc(p.credit || "") + "</span></figcaption></figure>").join("") + "</div>" : "")
-    + '<div class=two><div class="pn map"><h3>Where it is</h3>' + mapSvg(e) + '<table class=dist>' + near + '</table><div class=mut>Straight-line distances from our map points. Pin: ' + (e && e.pin_basis === "project" ? "the registered project point" : "the area centre") + '</div></div>'
+    + '<div class=two><div class="pn map"><h3>Where it is</h3>' + mapsTwo(e) + '</div>'
     + '<div class="pn area"><h3>The area today</h3>' + areaPanel(r, e) + "</div></div>"
     + '<div class=src>Source: ' + esc(src || "Najma announced projects layer") + "</div>" + footer(n + 1, total, by) + "</section>";
 }
@@ -313,7 +329,7 @@ export const REPORT_CSS = '@page{size:1080px 1920px;margin:0}*{box-sizing:border
   + '.dg{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0 8px}.ds{background:rgba(255,255,255,.08);border:1px solid rgba(197,165,106,.55);border-radius:14px;padding:12px 10px;text-align:center}.ds b{display:block;font:700 34px Fraunces,Georgia,serif;color:' + GOLD + '}.ds span{font-size:15px;color:#E6EFEC}'
   + '.dl{display:flex;align-items:center;gap:12px;margin-top:8px}.dl p{margin:0;font-size:19px;color:#F3E7CF}.dl b{color:#fff}.dsrc{font-size:14px;color:#A9C4BD;margin-top:12px}'
   + '.cover .cth{font:700 52px Fraunces,Georgia,serif;color:' + NAVY + ';margin:10px 0 4px;text-align:left}.cover .lead{text-align:left;margin:0 0 14px}.cover .note{text-align:left}'
-  + '.mapimg{filter:saturate(.85)}'
+  + '.mapimg{filter:saturate(.85)}.m2{margin:0 0 10px}.m2 figcaption{font:600 16px "IBM Plex Sans",sans-serif;color:#0A4F4A;margin-top:4px}.m2s{font-size:12px;color:' + MUTE + '}'
   + '.tlw{margin-top:18px;background:#fff;border:2px solid ' + GOLD + ';border-radius:22px;padding:18px 22px 14px}.tlh span{font:600 17px "IBM Plex Sans",sans-serif;letter-spacing:.16em;color:' + GOLD + '}.tlh i{display:block;font-size:17px;color:' + MUTE + ';font-style:normal;margin-top:2px}'
   + '.tlb{position:relative;margin-top:8px}.tlb img{width:100%;display:block}.tlcs{position:relative;height:150px}.tlc{position:absolute;top:4px;transform:translateX(-50%);width:19%;text-align:center}'
   + '.tly{font:700 30px Fraunces,Georgia,serif;color:' + NAVY + ';margin-top:-6px}.tlc p{margin:4px 0 0;font-size:16px;line-height:1.25;color:' + INK + '}.tlc b{font:700 20px Fraunces,Georgia,serif;color:#0A4F4A}.tlc i{display:block;font-style:normal;font-size:13px;color:' + MUTE + '}.tln{color:' + MUTE + ';font-size:15px}'
