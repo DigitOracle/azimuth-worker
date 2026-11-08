@@ -152,7 +152,49 @@ const FILTER_SHEET = '<div id=fs class=fs hidden><div class=fsb role=dialog aria
   + '<div class=rpl>Sort</div><div class=rpb id=so><button type=button data-s=new class=on>Newest launch</button><button type=button data-s=lo>Lowest price</button><button type=button data-s=hi>Highest price</button></div>'
   + '<div class=rpa><button type=button id=fsg class=bt>Show launches</button><button type=button id=fsc class="bt wa">Clear</button></div></div></div>';
 
-export function launchesPage(key, rk, snap, today) {
+// v820 - LAUNCH RADAR (Kendall 8 Nov 2026, "audit it and then build it out"): reported launch events from KV img_launch_radar (the
+// collector's launch_radar.py --push). A broker message or a post is a LEAD: every line starts with its evidence word (Reported /
+// Multiple sources report / Developer-announced), never a time the source did not give, never a register number, never "sold out".
+const RADAR_WORD = { L1: "Reported", L2: "Multiple sources report", L3: "Developer-announced" };
+export function radarEvents(radar, today) {
+  const ev = ((radar && radar.events) || []).filter((e) => !e.date || e.date >= today);
+  return ev.sort((a, b) => String(a.date || "9999").localeCompare(String(b.date || "9999")));
+}
+export function radarLine(e) {
+  const word = RADAR_WORD[e.marketing] || "Reported";
+  let d = String(e.event_type || "launch").replace(/_/g, " ");
+  if (e.date) { const t = new Date(e.date + "T12:00:00Z"); d += " " + t.getUTCDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][t.getUTCMonth()]; }
+  const bits = [d];
+  if (e.event_at && /T\d\d:\d\d/.test(e.event_at)) bits.push(String(e.event_at).slice(11, 16));
+  else bits.push(e.time_window ? String(e.time_window).replace(/_/g, " ") : "time not given");
+  if (e.registration_required) bits.push("registration needed");
+  return word + ": " + bits.join(" · ");
+}
+export function radarSection(radar, today) {
+  const ev = radarEvents(radar, today);
+  if (!ev.length) return "";
+  const card = (e) => {
+    const unk = [];
+    if (e.marketing !== "L3") unk.push("not yet confirmed by the developer");
+    if (e.register !== "L4") unk.push("not on the Land Department register yet");
+    if (e.registration_required && !e.registration_url) unk.push("no registration link yet");
+    const name = e.name_unknown ? esc(e.developer) + ' <span class=rdn>new launch &middot; name not given</span>' : esc(e.project);
+    const elsewhere = (e.names_elsewhere || []).length ? '<div class=rdx>Named elsewhere as ' + esc(e.names_elsewhere.join(", ")) + ' (unconfirmed)</div>' : "";
+    return '<div class="rdc rd-' + esc(e.marketing || "L1") + '"><div class=rdl>' + svg(LAUNCH_ICONS.launch, 12) + '<span>' + esc(radarLine(e)) + '</span></div>'
+      + '<b class=rdp>' + name + '</b>' + (e.name_unknown ? "" : '<div class=dv>' + esc(e.developer) + '</div>')
+      + (e.venue ? line2("pin", e.venue + (e.venue_basis === "as reported" ? " (as reported)" : "")) : "") + elsewhere
+      + (unk.length ? '<div class=rdu>' + esc("Still unknown: " + unk.join("; ")) + '</div>' : "")
+      + '<div class=rds>' + esc(String(e.evidence_n || 1)) + ' piece' + (e.evidence_n > 1 ? "s" : "") + ' of evidence &middot; first heard ' + esc(String(e.first_seen || "").slice(0, 10)) + '</div></div>';
+  };
+  return '<div class=rd><div class=rpl>Reported events &middot; not verified</div><p class=rdh>From broker invitations and posts. A lead, not a launch date, a registration or a sale.</p><div class=rdg>' + ev.map(card).join("") + '</div></div>'
+    + '<style>.rd{margin:0 0 12px}.rdh{font-size:.74rem;color:#5F6B66;margin:-2px 0 8px}.rdg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}'
+    + '.rdc{background:#FFFDF9;border:1px dashed #C5A56A;border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:4px;min-width:0}.rdc.rd-L3{border-style:solid;border-color:#0A4F4A}'
+    + '.rdl{display:flex;gap:5px;align-items:flex-start;font:600 .72rem "IBM Plex Sans",sans-serif;color:#8A6F3E}.rdl svg{flex:0 0 12px;margin-top:2px}.rdp{font:600 .98rem/1.2 Fraunces,serif;color:#0A4F4A;overflow-wrap:anywhere}'
+    + '.rdn{display:block;font:500 .7rem "IBM Plex Sans",sans-serif;color:#8A6F3E}.rdx{font-size:.7rem;color:#5F6B66}.rdu{font-size:.68rem;line-height:1.3;color:#8A3E1E;background:#FBF0E6;border-radius:8px;padding:3px 6px}.rds{font-size:.66rem;color:#8FA39B;margin-top:auto}</style>';
+}
+function line2(ic, v) { return '<div class=ln>' + svg(LAUNCH_ICONS[ic]) + '<span>' + esc(v) + '</span></div>'; }
+
+export function launchesPage(key, rk, snap, today, radar) {
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const rows = ((snap && snap.rows) || []).filter(shown);
   const devs = [...new Set(rows.map((r) => r.developer).filter(Boolean))].sort();
@@ -167,7 +209,7 @@ export function launchesPage(key, rk, snap, today) {
     + '<div class=fl><button type=button class=on data-f=week>This week</button><button type=button data-f=hot>Hot this month</button><button type=button data-f=soon>Coming soon</button><button type=button data-f=all>All</button><button type=button id=fo class=fo>' + svg('<path d="M4 6h16M7 12h10M10 18h4"/>', 14) + '<span id=fol>Filter</span></button><button type=button id=rs class=rs>Reset</button></div>'
     + '<p id=hn class=hn hidden>Off-plan sales in the last 30 days' + esc(hotTo) + '</p>'
     + '<div class=cl><span id=cn class=cn></span><button type=button id=rpo class=rpo>' + svg(LAUNCH_ICONS.report, 14) + 'Make a report</button></div>'
-    + REPORT_PANEL + FILTER_SHEET.replace("__DEVS__", devs.map((d) => '<option value="' + esc(d) + '">').join("")).replace("__ZONES__", zones.map((z) => '<option value="' + esc(z.toLowerCase()) + '">' + esc(z) + '</option>').join(""))
+    + radarSection(radar, today) + REPORT_PANEL + FILTER_SHEET.replace("__DEVS__", devs.map((d) => '<option value="' + esc(d) + '">').join("")).replace("__ZONES__", zones.map((z) => '<option value="' + esc(z.toLowerCase()) + '">' + esc(z) + '</option>').join(""))
     + '<div class=grid id=lg data-today="' + today + '" data-week="' + week + '">' + launchCards(selectLaunches(rows, {}, today), today, q) + '</div><div class=em id=le hidden>' + svg(LAUNCH_ICONS.launch, 28) + '<p>No launches match.</p></div>'
     + '<button type=button id=mo class=mo hidden>Show more</button>'
     + '<p class=nt>Updated ' + esc((snap && snap.generated) || "not yet") + ' by the 04:00 refresh.</p>'
@@ -228,6 +270,7 @@ export async function launchesRoute(request, env, url, deps) {
   if (url.pathname !== "/momo/work/launches" || request.method !== "GET") return null;
   let snap = null; try { snap = tidyLaunches(await deps.kv(env, "launches")); } catch (e) {}   // v803: register names in proper case
   const today = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
-  return new Response(deps.page(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", launchesPage(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", snap, today)),
+  let radar = null; try { radar = await deps.kv(env, "launch_radar"); } catch (e) {}   // v820 - reported events (KV img_launch_radar); absent = no section
+  return new Response(deps.page(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", launchesPage(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", snap, today, radar)),
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
