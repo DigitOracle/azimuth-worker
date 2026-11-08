@@ -81,7 +81,7 @@ ok(JSON.parse(store.get("recw_" + s1.id)).notes.summary.length > 5 && JSON.parse
 ok(seen.some((x) => /Test Boss One \(Managing Director\)/.test(x.sys)) && seen.some((x) => /"Nezuko" means Najjuko/.test(x.sys)), "the notes writer is told who was in the room and the usual mishearings");
 
 // ---- minutes
-{ const bad = await call("/momo/work/rec/minutes?id=" + s1.id); ok(bad.status === 404, "no minutes page before they are written"); }
+{ const bad = await call("/momo/work/rec/minutes?id=" + s1.id); ok(bad.status === 200 && (await bad.text()).includes("Preparing the minutes"), "before they are written the minutes page says preparing (v812: never disappears)"); }
 const mn = await api({ action: "minutes", id: s1.id }); ok(mn.ok, "minutes are written", mn);
 const sy = seen.filter((x) => x.schema.properties && x.schema.properties.purpose).pop();
 ok(/Never invent/.test(sy.sys) && /\[to confirm\]/.test(sy.sys) && /AGREED/.test(sy.sys) && /Minutes by|Najjuko Ganyana/.test(sy.sys), "the writer is held to the playbook rules");

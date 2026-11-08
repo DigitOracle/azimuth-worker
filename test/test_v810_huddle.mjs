@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import * as Hd from "../src/huddle.js";
 import { bridgeRoute } from "../src/work_bridge.js";
+const TI = (b, id) => b.data.market.topics.find((t) => t.id === id), T0 = (b) => TI(b, "t0");
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 
 // ---- capture every log line for the whole run (the birthday check at the end) ----
@@ -92,9 +93,9 @@ const topics = Array.from({ length: 18 }, (_, i) => ({ id: "t" + i, line: i === 
 const put1 = () => call("huddle/2026-11-09/form", { method: "PUT", h: nh("huddle-put-0001"), body: JSON.stringify({ form: { theme_slide_text: "Drafted line" }, market_topics: topics }) });
 [st, body] = await js(await put1());
 ok(st === 200 && body.data.market.topics.length === 18 && body.data.drafted_by_claude.includes("theme_slide_text"), "PUT form: drafted text and 18 topics");
-ok(!/vacancy/i.test(body.data.market.topics[0].line) && /units on the market/.test(body.data.market.topics[0].line), "never the word vacancy");
-ok(body.data.market.topics[3].provisional === true && body.data.market.topics[1].table === "v_gov_sales" && body.data.market.topics[1].as_of === "2026-11-05", "topics keep their source and date");
-const before = (await Hd.getCard(env, "2026-11-09")).log.length;
+ok(!/vacancy/i.test(T0(body).line) && /units on the market/.test(T0(body).line), "never the word vacancy");
+ok(TI(body,"t3").provisional === true && TI(body,"t1").table === "v_gov_sales" && TI(body,"t1").as_of === "2026-11-05", "topics keep their source and date");
+const before0 = 0; const before = (await Hd.getCard(env, "2026-11-09")).log.length;
 let rep = await js(await put1());
 ok(rep[0] === 200 && rep[2] === "true" && (await Hd.getCard(env, "2026-11-09")).log.length === before, "a retried PUT replays the first answer and writes nothing twice");
 

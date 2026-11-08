@@ -385,6 +385,48 @@ export function tasksOf(es) {
 }
 // v600 - a progress set by hand wins over the entries until an entry newer than it moves the task again
 // v791 - a quick task lives only as a task record (quick: true): it is on the list at once, with no log entry and no hours, until work is logged on it
+// v812 - one add path for a typed Quick task and a draft task from a meeting (same store, same shape)
+export async function quickTaskAdd(env, b, names, prof) {
+  const r = quickTaskRecord(b, names, new Date().toISOString(), prof.person === "najjuko" ? "Najjuko" : "Kendall"); if (r.error) return [400, { error: r.error }];
+  let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(r.rec.name))) || "null"); } catch (e) {}
+  if (prev && !prev.deleted) return [409, { error: "You already have a task called that." }];
+  if (!slug(r.rec.name)) return [400, { error: "Use letters or numbers in the task." }];
+  await env.MEETINGS.put(TPFX + slug(r.rec.name), JSON.stringify(r.rec)); return [200, { ok: true, task: r.rec }];
+}
+const DT_NAMES = () => PEOPLE.map((p) => p[0]);
+// v812 (Najjuko 8 Nov: "who is Liam?" - Liam is the videographer in her organogram) - everyone on her roster joins prof.people, and a name the
+// model put under "external" that is a roster person (full name, first name, nickname or one letter off) moves back to people. Never asked about again.
+const lev1 = (a, b) => { if (a === b) return true; if (Math.abs(a.length - b.length) > 1 || Math.min(a.length, b.length) < 4) return false; let i = 0, j = 0, d = 0; while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } } return d + (a.length - i) + (b.length - j) <= 1; };
+export function rosterMatch(name, people) {
+  const s = String(name || "").toLowerCase().replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim(); if (!s) return "";
+  const f = s.split(" ")[0];
+  for (const p of people) { const n = String(p[0]).toLowerCase(), nick = (/\(([^)]+)\)/.exec(p[0]) || [])[1]; const nf = n.replace(/\(.*?\)/g, "").trim().split(/\s+/)[0];
+    if (n === s || n.replace(/\s*\(.*?\)/g, "") === s || (nick && nick.toLowerCase() === f) || (s.split(" ").length === 1 && (nf === f || lev1(nf, f)))) return p[0]; }
+  return "";
+}
+export async function withRoster(env, prof) {
+  let raw = null; try { raw = JSON.parse(await env.MEETINGS.get(PEOPLE_KEY)); } catch (e) { raw = null; }
+  const ros = cleanRoster(raw); if (!ros.length) return prof;
+  const people = prof.people.slice();
+  for (const r of ros) if (!rosterMatch(r.n, people) && !(r.nick && rosterMatch(r.nick, people))) people.push([r.n, r.r || "Team", "team"]);
+  return Object.assign({}, prof, { people });
+}
+export function rosterFix(list, prof) {
+  for (const e of list || []) {
+    const keep = [];
+    for (const o of Array.isArray(e.external) ? e.external : []) { const hit = rosterMatch(o.name, prof.people); if (hit) { if (!(e.people || []).includes(hit)) (e.people = e.people || []).push(hit); } else keep.push(o); }
+    e.external = keep;
+  }
+  return list;
+}
+const addDaysW = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+// v812 - the summary's actions are the draft tasks when the minutes have none
+function attachFromSummary(m) { const tmp = { minutes: { actions: (m.summary_full.actions || []).map((a) => ({ action: a.action, owner: a.owner, due: a.due })) }, draft_tasks: m.draft_tasks }; return attachDraftTasks(tmp, DT_NAMES()).draft_tasks; }
+// v812 - the log entries filed from an HR-flagged meeting carry hr:true, so the debrief and reports leave the content out by default
+async function markEntriesHr(env, m) {
+  const hr = !!(m.summary_full && m.summary_full.hr);
+  for (const k of Array.isArray(m.entry_keys) ? m.entry_keys : []) { try { const e = JSON.parse(await env.MEETINGS.get(k)); if (e && !!e.hr !== hr) { e.hr = hr; await env.MEETINGS.put(k, JSON.stringify(e)); } } catch (x) {} }
+}
 export function quickTaskRecord(b, names, nowIso, by) {
   const text = String((b && b.text) || "").replace(/\s+/g, " ").trim(); if (text.length < 3) return { error: "Type or say the task first." };
   const name = text.length > 80 ? text.slice(0, 79).trimEnd() + "\u2026" : text, who = (names || []).includes(String(b.who || "")) ? String(b.who) : "";
@@ -567,6 +609,7 @@ async function recNotesCore(env, deps, m, transcript, input) {
     + "The speech engine mishears names and numbers: use a name only when the transcript clearly supports it, and prefer these team names when a spelling is close: " + names + ". "
     + (m.attendees && m.attendees.length ? "Najjuko told Momo who was in the room: " + attendeeLine(m.attendees) + ". Use those spellings. " : "")
     + "Other common mishearings: " + nameFixLine() + ". "
+    + (m.glossary ? "Team glossary (people who may be discussed): " + m.glossary + ". Never guess who said or asked something: if unclear write 'a team member (check name)'. " : "")   // v812
     + SPEAKER_RULE
     + "Never invent anything: no people, figures, dates, decisions or tasks that the transcript does not contain. If something is unclear, leave it out. Plain, third-person, specific; no filler. "
     + "summary: five to eight sentences on what the meeting was and what it decided. topics: the main subjects, a few words each. decisions: each decision taken. actions: each task or follow-up with its owner (a name, or 'Najjuko' when it is hers, or '' if unstated) and the due date or time as said ('' if none). people: everyone who clearly took part.";
@@ -600,6 +643,7 @@ function recStagesFor(kind, m, tlen, fresh) {
 async function recRead(env, deps, J, id, b) {
   const kind = b.kind === "minutes" ? "minutes" : "notes";
   let m = await recGet(env, id);
+  try { m.glossary = (await glossary(env, DT_NAMES(), [], m)).line; } catch (e) {}   // v812 - names for the notes and minutes prompts (not stored)
   const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
   if (transcript.length < 40) return J({ state: "error", fatal: true, error: "There is no speech to read in that recording yet." });
   let job = await recJobGet(env, id, kind);
@@ -616,16 +660,16 @@ async function recRead(env, deps, J, id, b) {
     else if (stage === "notes") {
       const input = transcript.length > REC_LONG ? (job.condensed || await recCondense(env, deps, transcript)) : transcript;
       const n = await recNotesCore(env, deps, m, transcript, input);
-      if (!n) err = "Momo could not write the notes just now."; else { m = (await recGet(env, id)) || m; m.notes = n; await recPut(env, m); }
+      if (!n) err = "Momo could not write the notes just now."; else { m = (await recGet(env, id)) || m; m.notes = n; delete m.glossary; await recPut(env, m); }
     }
     else if (stage === "minutes") {
       const mn = await buildMinutes(env, deps, m, m.notes, transcript);
-      if (!mn) err = "Momo could not write the minutes just now."; else { m = (await recGet(env, id)) || m; m.minutes = mn; await recPut(env, m); }
+      if (!mn) err = "Momo could not write the minutes just now."; else { m = (await recGet(env, id)) || m; m.minutes = mn; delete m.glossary; attachDraftTasks(m, DT_NAMES()); await recPut(env, m); }
     }
     else if (stage === "minutes_a") { const a = await buildMinutesA(env, deps, m, m.notes, transcript); if (!a) err = "Momo could not write the decisions and discussion just now."; else job.partA = a; }
     else if (stage === "minutes_b") {
       const bb = await buildMinutesB(env, deps, m, m.notes, job.condensed || transcript.slice(0, 30000), job.partA);
-      if (!bb) err = "Momo could not write the actions and open questions just now."; else { const mn = mergeMinutes(job.partA, bb); m = (await recGet(env, id)) || m; m.minutes = mn; await recPut(env, m); delete job.partA; }
+      if (!bb) err = "Momo could not write the actions and open questions just now."; else { const mn = mergeMinutes(job.partA, bb); m = (await recGet(env, id)) || m; m.minutes = mn; attachDraftTasks(m, DT_NAMES()); await recPut(env, m); delete job.partA; }
     }
   } catch (e) { err = "Momo hit a snag while reading."; }
   job.busy_until = 0; job.updated = Date.now();
@@ -661,7 +705,7 @@ async function recFinish(env, deps, m, clientSecs, opt) {
 // (one of hers: 26 Oct, one part, never finished). Every 15 minutes the minute tick finishes, for each person, any recording that has had no audio for
 // an hour: it retries the failed parts while their audio still exists and marks it auto_finished so the list can say so. Notes and minutes stay on
 // request, exactly as before. At most six recordings a sweep.
-export const REC_IDLE_MS = 3600e3, REC_WAIT_PARTS_MS = 6 * 3600e3;
+export const REC_IDLE_MS = 600e3, REC_WAIT_PARTS_MS = 6 * 3600e3;
 // v779 (Kendall 5 Nov: a slow phone lost the last 2 parts of a 19-min meeting) - a recording is not finished while the phone still owes parts,
 // for up to 6 hours after Stop; then it is finished with what arrived and says which parts are missing.
 export function recExpected(m) {
@@ -689,7 +733,7 @@ export async function recSweep(env, deps, nowMs) {
         if (!began || began + segSecs * 1000 + REC_IDLE_MS > now) continue;   // still live, or not an hour since its last audio
         if (recOwed(m, segs, now).waiting) continue;   // v779 - parts still on the phone: wait (up to 6 h after Stop)
         const endHm = new Date(began + segSecs * 1000 + 4 * 3600e3).toISOString().slice(11, 16);
-        m.auto_finished = new Date(now).toISOString();
+        m.auto_finished = new Date(now).toISOString(); m.recovered = true;   // v812 - shown as "Recovered" in Meetings
         const f = await recFinish(e, deps, m, 0, { endedHm: endHm });
         out.push({ person, id: m.id, parts: f.segs.length, chars: f.text.length, missing: f.missing.length });
       }
@@ -713,7 +757,7 @@ async function recDraftEntries(env, deps, J, m) {
       + "\n\nFile it as her work-log entry. ONE entry for the meeting itself (a briefing, interview or meeting she attended or ran is a Meeting). Add a separate entry only for something clearly separate that she herself did or was handed in it. "
       + "Every task or follow-up goes in works/progress with its owner and status; decisions and next steps go in the summary, evidence and next. Use only what the notes say.";
     let x = null; try { x = await deps.claudeJSON(env, sysPrompt(deps.prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)];
+    let list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, deps.prof)) : [clean(fallback((m.title || "Meeting") + ". " + (notes ? notes.summary : transcript.slice(0, 600)), deps.prof), deps.prof)]; rosterFix(list, deps.prof);
     list.forEach((e, i) => { if (i === 0) e.type = "Meeting";   // v753 - a recording is a meeting: the first entry is never left to the model or the keyword fallback
       if (i === 0 && m.secs >= 60 && !e.start && toMin(m.started_hm) != null && toMin(m.ended_hm) != null && toMin(m.ended_hm) > toMin(m.started_hm)) { e.start = m.started_hm; e.end = m.ended_hm; }
       if (e.time_of_day === "Unspecified" && toMin(e.start || m.started_hm) != null) { const h = Math.floor(toMin(e.start || m.started_hm) / 60); e.time_of_day = h < 12 ? "Morning" : h < 14 ? "Midday" : h < 18 ? "Afternoon" : "Evening"; } });
@@ -729,13 +773,40 @@ async function recDraftEntries(env, deps, J, m) {
     await recPut(env, m);
     return J({ ok: true, entries: list.slice(0, 20), title: m.title, secs: m.secs, date, notes: !!notes });
 }
+// v812 (Najjuko 8 Nov: "every finished recording keeps all forms") - transcript, minutes and summary (with its draft tasks) are made for EVERY
+// finished recording of the last 3 days, whichever button she tapped (Finish and make an entry, Notes and transcript, Meeting minutes). The button only
+// decides what opens now. One missing form per tick; a form that failed twice is left for her Refresh.
+export async function recEnsureForms(env, deps, nowMs) {
+  const now = nowMs || Date.now(), since = new Date(now - 3 * 86400e3 + 4 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+  const d2 = Object.assign({}, deps, { prof: await withRoster(env, NAJ_PROF), noPartyLookup: true }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
+  const r = await env.MEETINGS.list({ prefix: RECW });
+  for (const k of r.keys) {
+    const rid = k.name.slice(RECW.length); if (rid.slice(0, 8) < since) continue;
+    const m = await recGet(env, rid);
+    if (!m || m.status === "recording" || m.status === "transcribed" && !m.auto_file_off && !m.minutes) continue;   // still live, or the auto-file is on it
+    const segs = await recSegs(env, rid); if (recOwed(m, segs, now).waiting) continue;
+    if (recTranscriptText(segs, false, m).length < 40) continue;
+    if (!m.minutes && (m.forms_tries || 0) < 2) {
+      const a = await recRead(env, d2, J, rid, { kind: "minutes" });
+      if (a.state === "error") { const mm = (await recGet(env, rid)) || m; mm.forms_tries = (mm.forms_tries || 0) + 1; await recPut(env, mm); }
+      return { id: rid, step: "ensure_minutes", state: a.state };
+    }
+    if (!m.summary_full && !m.summary_tried) {
+      const mm = (await recGet(env, rid)) || m; mm.summary_tried = true;
+      try { const g = await glossary(env, DT_NAMES(), await listEntries(env, addDaysW(m.date, -30), m.date), m); const sf = await buildSummaryFull(env, Object.assign({}, d2, { condense: recCondense }), m, recTranscriptText(segs, true, m), g); if (sf) { mm.summary_full = sf; if (!(mm.draft_tasks || []).length) mm.draft_tasks = attachFromSummary(mm); } } catch (e) {}
+      await recPut(env, mm); await markEntriesHr(env, mm); return { id: rid, step: "ensure_summary", ok: !!mm.summary_full };
+    }
+  }
+  return null;
+}
 // v780 - AUTO-FILE: a recording that has finished (Stop with every part in, or the sweep) gets its notes, minutes and work-log entry written
 // by the minute tick, one model stage per tick, so the meeting appears in her weekly Work list on its own. Only Najjuko's log (NAJ_PROF),
 // only recordings from the last 3 days, never one she has already filed or is drafting by hand (status drafted / filed).
 export async function recAutoFile(env, deps, nowMs) {
   const now = nowMs || Date.now(), out = [];
   if (!deps || !deps.claudeJSON) return out;
-  const d2 = Object.assign({}, deps, { prof: NAJ_PROF, noPartyLookup: true }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
+  try { const f = await recEnsureForms(env, deps, now); if (f) { out.push(f); return out; } } catch (e) {}   // v812 - one model call per tick
+  const d2 = Object.assign({}, deps, { prof: await withRoster(env, NAJ_PROF), noPartyLookup: true }), J = (o, st) => Object.assign({ _status: st || 200 }, o);
   const since = new Date(now - 3 * 86400e3 + 4 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
   const r = await env.MEETINGS.list({ prefix: RECW });
   for (const k of r.keys) {
@@ -751,6 +822,11 @@ export async function recAutoFile(env, deps, nowMs) {
       if (a.state === "error") { const mm = (await recGet(env, rid)) || m; mm.auto_file_tries = (mm.auto_file_tries || 0) + 1; await recPut(env, mm); }
       return out;   // one model call per tick
     }
+    if (!m.summary_full && !m.summary_tried) {   // v812 - every recorded meeting gets its overall summary (whole transcript), before the entries
+      const segsS = await recSegs(env, rid), txS = recTranscriptText(segsS, true, m), mm0 = (await recGet(env, rid)) || m; mm0.summary_tried = true;
+      try { const g = await glossary(env, DT_NAMES(), await listEntries(env, addDaysW(m.date, -30), m.date), m); const sf = await buildSummaryFull(env, Object.assign({}, d2, { condense: recCondense }), m, txS, g); if (sf) mm0.summary_full = sf; } catch (e) {}
+      await recPut(env, mm0); out.push({ id: rid, step: "summary", ok: !!mm0.summary_full }); return out;
+    }
     const dr = await recDraftEntries(env, d2, J, m);
     if (!dr.ok || !Array.isArray(dr.entries) || !dr.entries.length) { const mm = (await recGet(env, rid)) || m; mm.auto_file_tries = (mm.auto_file_tries || 0) + 1; mm.status = "transcribed"; await recPut(env, mm); out.push({ id: rid, step: "entries", error: dr.error || "no entries" }); return out; }
     const at = new Date(now).toISOString(), keys = [];
@@ -758,9 +834,10 @@ export async function recAutoFile(env, deps, nowMs) {
       const e = dr.entries[i], eid = ("r" + rid.slice(-10) + i).replace(/[^a-z0-9]/g, "").slice(0, 16);
       const rec = Object.assign({ id: eid, date: m.date, text: "", link: "" }, e, { check: false, rec: rid, auto: true, created: at, updated: at });
       if (i === 0 && m.minutes) rec.minutes = true;
+      if (m.summary_full) { rec.hr = !!m.summary_full.hr; if (i === 0) rec.meeting_summary = (m.summary_full.paragraphs[0] || "").slice(0, 900); }   // v812
       await env.MEETINGS.put(PFX + m.date + "_" + eid, JSON.stringify(rec)); keys.push(PFX + m.date + "_" + eid);
     }
-    const mm = (await recGet(env, rid)) || m; mm.status = "filed"; mm.auto_filed = at; mm.entry_keys = keys; await recPut(env, mm);
+    const mm = (await recGet(env, rid)) || m; mm.status = "filed"; mm.auto_filed = at; mm.entry_keys = keys; if (mm.minutes || mm.notes) attachDraftTasks(mm, DT_NAMES()); if (mm.summary_full && !(mm.draft_tasks || []).length) mm.draft_tasks = attachFromSummary(mm); await recPut(env, mm);
     out.push({ id: rid, step: "filed", entries: keys.length });
     return out;
   }
@@ -796,8 +873,16 @@ async function recApi(request, env, J, deps) {
     const ms = (await Promise.all(ids.map((x) => recGet(env, x)))).filter(Boolean).sort((a, c) => (String(a.started || a.date) < String(c.started || c.date) ? 1 : -1)).slice(0, 120);
     return J({ ok: true, recs: ms.map((x) => ({ id: x.id, title: x.title || "Recording", date: x.date, started_hm: x.started_hm || "", secs: x.secs || 0, minutes: !!x.minutes, notes: !!(x.notes && x.notes.summary) })) });
   }
+  if (b.action === "archive_older") {   // v812 - bulk: hide meetings older than N days from the main list (reversible; never deletes)
+    const days = Math.max(1, Math.min(3650, parseInt(b.days, 10) || 0)); if (!days) return J({ error: "How many days?" }, 400);
+    const cut = new Date(Date.now() - days * 864e5 + 4 * 3600e3).toISOString().slice(0, 10); let n = 0, cursor;
+    do { const r = await env.MEETINGS.list({ prefix: RECW, cursor }); cursor = r.list_complete ? null : r.cursor;
+      for (const k of r.keys) { const x = await recGet(env, k.name.slice(RECW.length)); if (x && !x.archived && x.date < cut) { x.archived = new Date().toISOString(); await recPut(env, x); n++; } } } while (cursor);
+    return J({ ok: true, archived: n });
+  }
   const id = recId(b.id), m = id ? await recGet(env, id) : null;
   if (!m) return J({ error: "I cannot find that recording." }, 404);
+  if (b.action === "archive_one") { if (b.on === false) delete m.archived; else m.archived = new Date().toISOString(); await recPut(env, m); return J({ ok: true }); }   // v812
   if (b.action === "delete") {
     await recPurge(env, id, m); return J({ ok: true });   // v627
   }
@@ -841,14 +926,34 @@ async function recApi(request, env, J, deps) {
     const n = await recNotes(env, deps, m, transcript); if (!n) return J({ error: "Momo could not write the notes just now. The recording is safe: try again." }, 502);
     m.notes = n; await recPut(env, m); return J({ ok: true });
   }
+  if (b.action === "summary_full") {   // v812 - the overall meeting summary from the WHOLE transcript (condensed when long); regenerates on Refresh
+    const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
+    if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    const g = await glossary(env, DT_NAMES(), await listEntries(env, addDaysW(m.date, -30), m.date), m);
+    const sf = await buildSummaryFull(env, Object.assign({}, deps, { condense: recCondense }), m, transcript, g);
+    if (!sf) return J({ error: "Momo could not write the summary just now. The recording is safe: try again." }, 502);
+    const mm = (await recGet(env, id)) || m; mm.summary_full = sf; if (!(mm.minutes && mm.minutes.actions && mm.minutes.actions.length)) mm.draft_tasks = attachFromSummary(mm); await recPut(env, mm);
+    await markEntriesHr(env, mm); return J({ ok: true });
+  }
+  if (b.action === "summary_edit") {   // v812 - her own wording
+    if (!m.summary_full) return J({ error: "There is no summary to edit yet." }, 409);
+    const lines = (a, k) => (Array.isArray(a) ? a : []).map((x) => String(x).replace(/\s+/g, " ").trim().slice(0, 900)).filter(Boolean).slice(0, k);
+    if (b.paragraphs) m.summary_full.paragraphs = lines(b.paragraphs, 8); if (b.bullets) m.summary_full.bullets = lines(b.bullets, 24);
+    if (b.hr != null) m.summary_full.hr = !!b.hr; m.summary_full.edited = new Date().toISOString(); await recPut(env, m); await markEntriesHr(env, m); return J({ ok: true });
+  }
+  if (b.action === "name_fix") {   // v812 - tap a name: summary, minutes and draft tasks change; remembered for later meetings
+    const from = String(b.from || "").trim(), to = String(b.to || "").trim(); if (!from || !to) return J({ error: "Which name, and who is it?" }, 400);
+    applyNameFix(m, from, to, DT_NAMES()); await recPut(env, m); await rememberNameFix(env, from, to); return J({ ok: true });
+  }
   if (b.action === "minutes") {   // v625 - FN meeting minutes from the recording; kept on the record so reopening never re-writes (b.again forces a fresh draft)
     if (m.minutes && !b.again) return J({ ok: true, again: true });
     const segs = await recSegs(env, id), transcript = recTranscriptText(segs, true, m);
     if (transcript.length < 40) return J({ error: "There is no speech to read in that recording yet." }, 422);
+    try { m.glossary = (await glossary(env, DT_NAMES(), [], m)).line; } catch (e) {}   // v812
     if (!m.notes || !m.notes.summary) { const n = await recNotes(env, deps, m, transcript); if (n) m.notes = n; }
     const mn = await buildMinutes(env, deps, m, m.notes, transcript);
     if (!mn) return J({ error: "Momo could not write the minutes just now. The recording is safe: try again." }, 502);
-    m.minutes = mn; await recPut(env, m); return J({ ok: true });
+    m.minutes = mn; delete m.glossary; attachDraftTasks(m, DT_NAMES()); await recPut(env, m); return J({ ok: true });
   }
   if (b.action === "log") { m.log = (m.log || []).concat((Array.isArray(b.ev) ? b.ev : []).slice(0, 80).map((x) => String(x).replace(/[^ -~]/g, "").slice(0, 120))).slice(-120); await recPut(env, m); return J({ ok: true }); }   // v620 - the page's own step trail (event names and sizes only), so a stuck recording can be traced
   if (b.action === "filed") { m.status = "filed"; await recPut(env, m); return J({ ok: true }); }
@@ -878,12 +983,24 @@ async function recView(env, url) {
     + speakersHtml(m)   // v663 - who said what: confirm, rename or merge the speakers; a name applies to every line of that speaker
     + "<h2>Transcript</h2><p class=m>Written automatically: names and numbers may be misheard.</p><div class=tx>" + escH(tx).replace(/\n\n/g, "<br><br>") + "</div>"
     + "<div class=no style='margin-top:28px;text-align:center'><button class=gh id=dl>Delete this recording</button><div id=dq style='display:none;background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:14px;margin-top:10px'>Delete this recording and its transcript? This cannot be undone.<div style='display:flex;gap:8px;justify-content:center;margin-top:10px'><button class='bt pr' id=dy>Delete it</button><button class=bt id=dn>Keep it</button></div></div></div>";
+  // v812 - the meeting page leads with the overall summary, then the actions as draft tasks, then the minutes and the transcript (expandable)
+  const sf = m.summary_full, kq = encodeURIComponent(url.searchParams.get("key") || ""), nfix = await readNameFix(env), names = [...new Set(DT_NAMES().concat(Object.values(nfix)))];
+  const recent = Date.parse(m.date + "T00:00:00Z") >= Date.now() - 7 * 864e5;
+  const mnx = m.minutes, minutesInline = mnx ? "<h3>Decisions</h3>" + (mnx.decisions.length ? "<ul>" + mnx.decisions.map((d) => "<li><b>" + escH(d.headline) + ".</b> " + escH(d.detail) + "</li>").join("") + "</ul>" : "<p class=m>None recorded.</p>")
+    + mnx.discussion.map((d) => "<h3>" + escH(d.heading) + "</h3><ul>" + d.bullets.map((x) => "<li>" + escH(x) + "</li>").join("") + "</ul>").join("")
+    + "<p><a href='/momo/work/rec/minutes?id=" + encodeURIComponent(id) + "&key=" + kq + "'>Open the meeting minutes page</a></p>" : "<p class=m>No minutes yet.</p>";
+  const TOP = "<h1>" + escH(m.title || "Recording") + "</h1><p class=m>" + escH(m.date) + " · " + escH(m.started_hm || "") + (m.ended_hm ? " to " + escH(m.ended_hm) : "") + " · " + Math.round((m.secs || 0) / 60) + " minutes</p>"
+    + "<div class=btr><a class=pr id=msum href='/momo/work/rec/summary?id=" + encodeURIComponent(id) + "&key=" + kq + "'>Meeting summary</a><a id=mday href='/momo/work/report?key=" + kq + "&from=" + m.date + "&to=" + m.date + "'>Daily report</a></div>"
+    + "<div class=btr><button type=button id=srefresh>Refresh summary</button><button type=button id=sedit>Edit summary</button></div>"
+    + (sf ? summaryBlock(sf, names) + editBox(sf) : recent && segs.length ? "<div class=sf id=sauto></div>" : "<div class=sf><p class=m>No summary yet. Tap Refresh summary.</p></div>")
+    + "<h2>Actions</h2>" + (Array.isArray(m.draft_tasks) && m.draft_tasks.length ? draftTasksWidget(m, DT_NAMES()) : "<p class=m>No action points yet.</p>")
+    + "<details class=ex><summary>Full minutes</summary>" + minutesInline + "</details>";
   // v623 - the transcript page had no way back and no way out (Kendall, 24 Oct 2026): a Back button, "Share / Save as PDF" (the print sheet, as on the plan PDFs) and Share (the phone's share sheet, else copy)
   const key = url.searchParams.get("key") || "", back = "/momo/work?key=" + encodeURIComponent(key);
   const shareText = (m.title || "Recording") + " - " + m.date + (n && n.summary ? "\n\n" + n.summary : "") + "\n\nTranscript (automatic, may mishear names):\n" + tx;
   const bar = "<div class=bar><a class=bk href='" + back + "' onclick=\"if(history.length>1){history.back();return false}\">&#8592; Back</a><span class=sp></span><button class=bt id=sv>Share</button><button class='bt pr' onclick='print()'>Share / Save as PDF</button></div>";
   const js = "<script>var T=" + JSON.stringify(shareText).replace(/</g, "\\u003c") + ";var K=new URLSearchParams(location.search),ID=K.get('id'),KY=K.get('key')||'';document.getElementById('dl').onclick=function(){this.style.display='none';document.getElementById('dq').style.display='block'};document.getElementById('dn').onclick=function(){document.getElementById('dq').style.display='none';document.getElementById('dl').style.display=''};document.getElementById('dy').onclick=function(){var b=this;b.disabled=true;fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id:ID})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.href='/momo/work?key='+encodeURIComponent(KY)}else{b.disabled=false;alert('Could not delete it just now. Nothing was changed.')}}).catch(function(){b.disabled=false;alert('Could not delete it just now. Nothing was changed.')})};var SP=document.querySelectorAll('[data-sp]');function spPost(o){o.action='speakers';o.id=ID;return fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){location.reload()}else{alert((j&&j.error)||'Could not save that just now.')}}).catch(function(){alert('Could not save that just now.')})}for(var i=0;i<SP.length;i++){(function(row){var g=row.getAttribute('data-sp');row.querySelector('.spok').onclick=function(){spPost({op:'rename',group:g,name:row.querySelector('input').value})};var mg=row.querySelector('select');if(mg)mg.onchange=function(){if(mg.value&&confirm('Speaker '+g+' and Speaker '+mg.value+' are the same person?'))spPost({op:'merge',group:g,into:mg.value})}})(SP[i])}var RM=document.getElementById('sprm');if(RM)RM.onclick=function(){spPost({op:'match'})};document.getElementById('sv').onclick=function(){var d={title:document.title,text:T};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(T).then(function(){alert('Copied. Paste it where you want it.')})}else{alert('Use Share / Save as PDF')}}</script>";
-  return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 80px}.w{max-width:720px;margin:0 auto;padding-top:12px}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{color:#0A4F4A;text-decoration:none;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:8px 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}.gh{font:inherit;font-size:.85rem;background:none;border:0;color:#626B78;text-decoration:underline;padding:8px}@media print{body{background:#fff}.bar,.no{display:none}.tx{border:0;padding:0}}</style></head><body>" + bar + "<div class=w>" + body + "</div>" + js + "</body></html>",
+  return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH(m.title || "Recording") + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 80px}.w{max-width:720px;margin:0 auto;padding-top:12px}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{color:#0A4F4A;text-decoration:none;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:8px 0 4px}h2{font-size:1rem;color:#8A6F3E;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.08em}.m{color:#626B78;font-size:.9rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:16px;font-size:.95rem}.gh{font:inherit;font-size:.85rem;background:none;border:0;color:#626B78;text-decoration:underline;padding:8px}@media print{body{background:#fff}.bar,.no{display:none}.tx{border:0;padding:0}}" + SUMMARY_CSS + "</style></head><body>" + bar + "<div class=w>" + TOP + "<details class=ex><summary>Notes, speakers and transcript</summary>" + body + "</details></div>" + js + "<script>" + SUMMARY_JS + "</script></body></html>",
     { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
@@ -910,7 +1027,7 @@ export async function workRoute(request, env, url, deps) {
     if (p !== "/momo/work") return new Response("not found", { status: 404 });
     return new Response(deps.page(key, rk, '<a class=back href="/momo?key=' + encodeURIComponent(key) + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Work</h1><div class=empty><p>This work log is private to its owner\'s link.</p></div>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
-  if (who === "najjuko") return workInner(request, env, url, Object.assign({}, deps, { prof: NAJ_PROF }), NAJ_PROF, J, key, rk);
+  if (who === "najjuko") { const P = await withRoster(env, NAJ_PROF); return workInner(request, env, url, Object.assign({}, deps, { prof: P }), P, J, key, rk); }   // v812 - her organogram
   if (who === "kendall" && p === "/momo/work" && !url.searchParams.get("full")) return new Response(deps.page(key, rk, SIMPLE_BODY(key)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v671 - simple Momo: record, minutes, send
   if (who === "kendall" && p === "/momo/work/simple.js") return new Response(SIMPLE_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
   const cfg = await readCfg(env, who), prof = profOf(cfg), wenv = workEnv(env, who);
@@ -926,7 +1043,7 @@ export async function workRoute(request, env, url, deps) {
 async function workInner(request, env, url, deps, prof, J, key, rk) {
   const p = url.pathname;
   if (p === "/momo/work/voicetest") { return voiceTestRoute(request, env, url, J, deps); }   // v626 - the private speaker-detection test; a wrong key is a 401 and nothing runs
-  if (p === "/momo/work") return new Response(deps.page(key, rk, WORK_BODY.replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v662 - restored: v652 dropped this route with the Jobs tab, so the Work page itself answered 404
+  if (p === "/momo/work") return new Response(deps.page(key, rk, (await workHomeTop(env, key)) + WORK_BODY.replace(/__KEY__/g, esc(key))), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });   // v662 - restored: v652 dropped this route with the Jobs tab, so the Work page itself answered 404
   if (p.startsWith("/momo/work/team")) return teamRoute(request, env, url, deps);
   if (p.startsWith("/momo/work/plan")) return planRoute(request, env, url, deps, prof.person === "najjuko" ? { agents: PEOPLE.filter((x) => deptOf(x[0]) === "Sales").map((x) => x[0]), team: PEOPLE.filter((x) => ["Marketing", "Leadership"].includes(deptOf(x[0]))).map((x) => [x[0], x[1]]) } : { agents: [], team: prof.people.map((x) => [x[0], x[1]]) });   // v590 - the content plan
   if (p === "/momo/work/prep.js") return new Response(PREP_JS, { headers: { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" } });
@@ -935,7 +1052,37 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
   if (p === "/momo/work/rec/api" && request.method === "POST") return recApi(request, env, J, deps);
   if (p === "/momo/work/rec/view") return recView(env, url);
   if (p.startsWith("/momo/work/item/")) return itemRoute(env, url, prof);   // v645 - one item (an entry, a task, a meeting) as its own FN Realty PDF, any day
-  if (p === "/momo/work/rec/minutes") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m || !m.minutes) return new Response("not found", { status: 404 }); return new Response(renderMinutes(m, m.minutes, url.searchParams.get("key") || "").replace("</body>", '<a href="/momo/work?key=' + encodeURIComponent(url.searchParams.get("key") || "") + '&sync=rec:' + encodeURIComponent(id) + '" style="position:fixed;left:14px;bottom:14px;background:#0A4F4A;color:#fff;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;text-decoration:none">Sync to planner &amp; tasks</a></body>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }   // v625
+  if (p === "/momo/work/rec/transcript") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m) return new Response("not found", { status: 404 });   // v812
+    const tx = recTranscriptText(await recSegs(env, id), true, m), k = url.searchParams.get("key") || "";
+    return new Response(simpleDoc("Transcript – " + (m.title || "Meeting") + " – " + m.date, "<h1>Transcript</h1><p class=m>" + escH(m.title || "Meeting") + " · " + escH(longDateW(m.date)) + " · " + Math.round((m.secs || 0) / 60) + " minutes. Written automatically: names and numbers may be misheard.</p>"
+      + "<div class=btr><button type=button class=pr id=tmin>Make minutes from this</button><button type=button id=tsum>Summarise this</button></div><p class=m id=tmsg></p>"
+      + "<div class=tx>" + (tx.trim() ? escH(tx).replace(/\n\n/g, "<br><br>").replace(/\n/g, "<br>") : "No speech in this recording yet.") + "</div>",
+      "var K=new URLSearchParams(location.search),ID=K.get('id'),KY=K.get('key')||'',msg=document.getElementById('tmsg');function go(a,to){msg.textContent=a==='minutes'?'Writing the minutes from the whole transcript...':'Writing the summary...';fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json','X-Momo-Confirm':'page'},body:JSON.stringify({action:a,id:ID,again:true})}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok)location.href='/momo/work/rec/'+to+'?id='+encodeURIComponent(ID)+'&key='+encodeURIComponent(KY);else msg.textContent=(j&&j.error)||'Try again.'}).catch(function(){msg.textContent='No connection. Try again.'})}document.getElementById('tmin').onclick=function(){go('minutes','minutes')};document.getElementById('tsum').onclick=function(){go('summary_full','summary')};"),
+      { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  if (p === "/momo/work/meetings") {   // v812 - all meetings as cards, newest first; Archived filter; bulk archive (never deletes)
+    const arch = url.searchParams.get("archived") === "1", k = url.searchParams.get("key") || "", kq = encodeURIComponent(k), ids = []; let cursor;
+    do { const r = await env.MEETINGS.list({ prefix: RECW, cursor }); cursor = r.list_complete ? null : r.cursor; for (const x of r.keys) ids.push(x.name.slice(RECW.length)); } while (cursor);
+    const ms = (await Promise.all(ids.map((x) => recGet(env, x)))).filter((x) => x && !!x.archived === arch).sort((a, b) => ((a.status === "recording") !== (b.status === "recording") ? (a.status === "recording" ? -1 : 1) : String(a.started || a.date) < String(b.started || b.date) ? 1 : -1)).slice(0, 150);   // v812 - unfinished first
+    return new Response(simpleDoc("Meetings", "<h1>Meetings</h1><div class=btr><a class=" + (arch ? "''" : "pr") + " href='/momo/work/meetings?key=" + kq + "'>Current</a><a class=" + (arch ? "pr" : "''") + " href='/momo/work/meetings?key=" + kq + "&archived=1'>Archived</a></div>"
+      + (arch ? "" : "<div class=sf><h3>Tidy the list</h3><div style='display:flex;gap:8px;align-items:center'>Archive meetings older than <input id=adays type=number min=1 value=30 style='width:64px;padding:6px;border:1px solid #E3DDD1;border-radius:8px'> days <button type=button id=ago class=pr style='border:0;border-radius:10px;background:#0A4F4A;color:#fff;padding:8px 12px;font-weight:600'>Archive</button></div><p class=m>Archived meetings stay in Archived and can be brought back. Nothing is deleted.</p></div>")
+      + (ms.length ? ms.map((m) => meetingCardHtml(m, kq, arch)).join("") : "<p class=m>" + (arch ? "No archived meetings." : "No meetings yet.") + "</p>"),
+      "var KY=new URLSearchParams(location.search).get('key')||'';function post(b){return fetch('/momo/work/rec/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()})}document.querySelectorAll('[data-fin]').forEach(function(b){b.onclick=function(e){e.preventDefault();b.textContent='Finishing...';post({action:'finish',id:b.getAttribute('data-fin')}).then(function(j){if(j&&j.error){b.textContent='Finish now';alert(j.error)}else location.reload()})}});document.querySelectorAll('[data-arc]').forEach(function(b){b.onclick=function(){post({action:'archive_one',id:b.getAttribute('data-arc'),on:b.getAttribute('data-on')==='1'}).then(function(){location.reload()})}});var g=document.getElementById('ago');if(g)g.onclick=function(){var d=+document.getElementById('adays').value;if(!d||!confirm('Archive every meeting older than '+d+' days? You can bring them back from Archived.'))return;post({action:'archive_older',days:d}).then(function(j){alert((j&&j.archived||0)+' archived.');location.reload()})};"),
+      { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  if (p === "/momo/work/rec/summary") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m) return new Response("not found", { status: 404 });   // v812
+    const nfix = await readNameFix(env), names = [...new Set(DT_NAMES().concat(Object.values(nfix)))], k = url.searchParams.get("key") || "";
+    const body = "<div class=bar><button class=bk id=bk>&#8592; Back</button><span class=sp></span><button class='bt pr' onclick='print()'>Share / Save as PDF</button></div><div class=w><h1>Meeting summary</h1><p class=m>" + escH(m.title || "Meeting") + " · " + escH(longDateW(m.date)) + " · " + Math.round((m.secs || 0) / 60) + " minutes</p>"
+      + (m.summary_full ? summaryBlock(m.summary_full, names) : "<div class=sf><p><b>Preparing the summary…</b> It is written from the whole transcript and fills in here when ready. The minutes and the transcript stay available meanwhile.</p></div><script>setTimeout(function(){location.reload()},20000)</script>")
+      + ((m.draft_tasks || []).length ? "<div class=sf><h3>Actions</h3><ul>" + m.draft_tasks.filter((d) => d.state !== "dismissed").map((d) => "<li>" + escH(d.text) + " · " + (d.owner ? escH(d.owner) : "<b style='color:#8A6F3E'>owner needed</b>") + (d.due ? " · due " + escH(d.due) : "") + "</li>").join("") + "</ul></div>" : "") + "</div>";
+    return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH("FN Realty – Meeting summary – " + (m.title || "Meeting") + " – " + m.date) + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 16px 60px}.w{max-width:720px;margin:0 auto}.bar{position:sticky;top:0;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{font:inherit;color:#0A4F4A;background:none;border:0;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:10px 0 4px;font-family:Fraunces,serif}.m{color:#626B78;font-size:.9rem}@media print{body{background:#fff}.bar{display:none}}" + SUMMARY_CSS + "</style></head><body>" + body + "<script>" + BACK_JS + SUMMARY_JS + "</script></body></html>", { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+  }
+  if (p === "/momo/work/rec/tasks") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m) return new Response("not found", { status: 404 });   // v812
+    if (!Array.isArray(m.draft_tasks) && (m.minutes || m.notes)) { attachDraftTasks(m, DT_NAMES()); await recPut(env, m); }
+    return new Response(deps.page(url.searchParams.get("key") || "", url.searchParams.get("rk") || "", draftTasksPage(m, DT_NAMES(), url.searchParams.get("key") || "")), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }
+  if (p === "/momo/work/rec/minutes") { const id = recId(url.searchParams.get("id")), m = id ? await recGet(env, id) : null; if (!m) return new Response("not found", { status: 404 });
+    if (!m.minutes) return new Response(simpleDoc("Meeting minutes", "<h1>Meeting minutes</h1><p class=m>" + escH(m.title || "Meeting") + " · " + escH(m.date) + "</p><div class=sf><p><b>Preparing the minutes…</b> They are written from the whole transcript and fill in here when ready. The summary and the transcript stay available meanwhile.</p></div>", "setTimeout(function(){location.reload()},20000);"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });   
+    return new Response(renderMinutes(m, m.minutes, url.searchParams.get("key") || "").replace("</body>", '<a href="/momo/work?key=' + encodeURIComponent(url.searchParams.get("key") || "") + '&sync=rec:' + encodeURIComponent(id) + '" style="position:fixed;left:14px;bottom:14px;background:#0A4F4A;color:#fff;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;text-decoration:none">Sync to planner &amp; tasks</a><a href="/momo/work/rec/tasks?id=' + encodeURIComponent(id) + '&key=' + encodeURIComponent(url.searchParams.get("key") || "") + '" style="position:fixed;right:14px;bottom:14px;background:#C5A56A;color:#1C2321;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;text-decoration:none">Draft tasks (' + (m.draft_tasks || []).filter((d) => d.state === "draft").length + ')</a></body>'), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } }); }   // v625
   if (p === "/momo/work/api") {
     if (request.method === "GET") {
       const [f, t] = weekOf(okDate(url.searchParams.get("week")));
@@ -957,7 +1104,7 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       if (!text) return J({ error: "Write what happened first." }, 400);
       let x = null;
       try { x = await deps.claudeJSON(env, sysPrompt(prof), "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nWhat she wrote:\n" + text, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text).map((s) => clean(fallback(s, prof), prof));
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text).map((s) => clean(fallback(s, prof), prof)); rosterFix(list, prof);
       // v571 - third parties: a name she has confirmed before is recognised at once; a new one is looked up on the web and shown for her to confirm
       const known = await knownParties(env), seen = {};
       for (const e of list) for (const o of e.external) {
@@ -1042,11 +1189,30 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     if (b.action === "task_quick") {   // v791 - the Quick task button on every Work screen: typed or spoken, on the list at once
       const names = (prof.people || []).map((p) => p[0]);
       if (b.peek) return J({ ok: true, people: names });
-      const r = quickTaskRecord(b, names, new Date().toISOString(), prof.person === "najjuko" ? "Najjuko" : "Kendall"); if (r.error) return J({ error: r.error }, 400);
-      let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(r.rec.name))) || "null"); } catch (e) {}
-      if (prev && !prev.deleted) return J({ error: "You already have a task called that." }, 409);
-      if (!slug(r.rec.name)) return J({ error: "Use letters or numbers in the task." }, 400);
-      await env.MEETINGS.put(TPFX + slug(r.rec.name), JSON.stringify(r.rec)); return J({ ok: true, task: r.rec });
+      const [st, o] = await quickTaskAdd(env, b, names, prof); return J(o, st);
+    }
+    if (b.action === "task_snooze") {   // v812 - the home card's "tomorrow": the task's due date moves one day on (from today if it was overdue)
+      const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
+      let prev = null; try { prev = JSON.parse((await env.MEETINGS.get(TPFX + slug(name))) || "null"); } catch (e) {}
+      const t0 = dubaiToday(), base = prev && prev.due && prev.due > t0 ? prev.due : t0, due = new Date(Date.parse(base + "T00:00:00Z") + 864e5).toISOString().slice(0, 10);
+      const rec = Object.assign({ name, status: "Started", percent: 0 }, prev || {}, { due, updated: new Date().toISOString() }); await env.MEETINGS.put(TPFX + slug(name), JSON.stringify(rec)); return J({ ok: true, task: rec });
+    }
+    if (b.action === "draft_task") {   // v812 - a draft task from a meeting's minutes: add (the quick-task path), edit, dismiss, add_all. Only her tap adds.
+      const rid = recId(b.id), m = rid ? await recGet(env, rid) : null; if (!m) return J({ error: "No meeting with that id." }, 404);
+      const names = (prof.people || []).map((p) => p[0]), L = Array.isArray(m.draft_tasks) ? m.draft_tasks : [], op = String(b.op || "");
+      const targets = op === "add_all" ? L.filter((d) => d.state === "draft") : L.filter((d) => d.id === String(b.did || ""));
+      if (!targets.length) return J({ error: "Nothing to change." }, 404);
+      const errs = [];
+      for (const d of targets) {
+        if (op === "dismiss") d.state = "dismissed";
+        else if (op === "save") { if (b.text) d.text = String(b.text).replace(/\s+/g, " ").trim().slice(0, 200); if (b.who != null) { d.owner = names.includes(String(b.who)) ? String(b.who) : ""; d.owner_needed = !d.owner; } if (b.due != null) d.due = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due)) ? String(b.due) : ""; }
+        else if (op === "add" || op === "add_all") {
+          const who = op === "add" && b.who ? String(b.who) : d.owner, [st, o] = await quickTaskAdd(env, { text: op === "add" && b.text ? b.text : d.text, who, due: op === "add" && b.due ? b.due : d.due }, names, prof);
+          if (st < 300) { d.state = "added"; d.task = o.task.name; if (who && names.includes(who)) { d.owner = who; d.owner_needed = false; } } else errs.push(o.error);
+        } else return J({ error: "op is add, save, dismiss or add_all." }, 400);
+      }
+      m.draft_tasks = L; await recPut(env, m);
+      return J(errs.length && op !== "add_all" ? { error: errs[0], drafts: L } : { ok: true, drafts: L, skipped: errs.length }, errs.length && op !== "add_all" ? 409 : 200);
     }
     if (b.action === "task_delete") {   // v757 - kept as a record marked deleted (not erased), so the log entries behind it stay intact
       const name = String(b.name || "").trim().slice(0, 80); if (!name) return J({ error: "Which task?" }, 400);
@@ -1077,7 +1243,7 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
       const prompt = "Date: " + okDate(b.date) + " (" + dayName(okDate(b.date)) + ")\nShe uploaded a document named \"" + name + "\"." + (hit ? " This is a recurring document she has filed before as \"" + hit.title + "\" (" + hit.kind + "); last time it was filed as: " + hit.summary + ". File it the same way unless the content differs." : "")
         + "\nFile its contents as her work-log entries: what she did (prepared, presented, ran, agreed), who was there, every task or action it lists with its owner and status, decisions, next steps. A deck or agenda she produced is a Deliverable AND the meeting it was for is a Meeting.\nDocument text:\n" + text;
       try { x = await deps.claudeJSON(env, sysPrompt(prof), prompt, DAY_SCHEMA, deps.model, 4000); } catch (e) {}
-      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text.slice(0, 3000)).slice(0, 8).map((s) => clean(fallback(s, prof), prof));
+      const list = x && Array.isArray(x.entries) && x.entries.length ? x.entries.map((y) => clean(y, prof)) : splitDay(text.slice(0, 3000)).slice(0, 8).map((s) => clean(fallback(s, prof), prof)); rosterFix(list, prof);
       list.forEach((e) => { e.src_file = name; });
       return J({ entries: list.slice(0, 20), entry: list[0], file: name, chars: text.length, recognised: hit ? hit.title : "", excerpt: text.slice(0, 400) });
     }
@@ -1145,7 +1311,8 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     let to = all ? dubaiToday() : picked.length ? picked[picked.length - 1] : okDate(url.searchParams.get("to") || weekOf(from)[1]);
     if (to < from) { const x = from; from = to; to = x; }
     if ((Date.parse(to) - Date.parse(from)) / 864e5 > 400) to = new Date(Date.parse(from) + 400 * 864e5).toISOString().slice(0, 10);   // a span is at most about 13 months
-    const _es = await listEntries(env, from, to), _all = applyOverrides(tasksOf(await listEntries(env, prof.start, to)), await taskOverrides(env));
+    const _hr = url.searchParams.get("hr") === "1", _es = (await listEntries(env, from, to)).map((e) => shareSafeEntry(e, null, _hr)), _all = applyOverrides(tasksOf(await listEntries(env, prof.start, to)), await taskOverrides(env));
+    if (!_es.length) return new Response("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Daily report</title><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;background:#FAF7F1;color:#1C2321;padding:24px 16px}.c{max-width:520px;margin:0 auto;background:#FFFDF9;border:1px solid #E3DDD1;border-radius:16px;padding:18px}button{font:inherit;border:1.5px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:12px;padding:10px 16px;font-weight:600}</style></head><body><div class=c><h2 style='color:#0A4F4A;margin:0 0 8px'>Nothing logged " + (from === to ? "on " + escH(longDateW(from)) : "from " + escH(from) + " to " + escH(to)) + "</h2><p>There are no work-log entries for " + (from === to ? "that day" : "those days") + " yet, so there is no report to show.</p><button id=bk>&#8592; Back</button></div><script>" + BACK_JS + "</script></body></html>", { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });   // v812 - an empty day says so instead of a blank page
     return new Response(withP(prof, () => reportHtml(_es, from, to, _all, picked)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v573 DEBRIEF (Kendall 14 Oct: "Ali ... wants a debrief of what happened because he wasn't there ... immediately create a PDF ... very quick").
@@ -1154,7 +1321,8 @@ async function workInner(request, env, url, deps, prof, J, key, rk) {
     const id = String(url.searchParams.get("id") || "").replace(/[^a-z0-9]/g, ""), date = okDate(url.searchParams.get("date"));
     let e = null; try { e = JSON.parse(await env.MEETINGS.get(PFX + date + "_" + id)); } catch (x) {}
     if (!e) return new Response("not found", { status: 404 });
-    return new Response(withP(prof, () => debriefHtml(e)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    const _m = e.rec ? await recGet(env, recId(e.rec)) : null, _inc = url.searchParams.get("hr") === "1";   // v812 - the entry's OWN recording (e.rec), never another one
+    return new Response(withP(prof, () => debriefHtml(shareSafeEntry(e, _m, _inc), _m, { key: url.searchParams.get("key") || "", includeHr: _inc })), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v583 - the vendor report page: one page in FN's frame from the engine's /vet answer
   if (p === "/momo/work/vet") {
@@ -1194,7 +1362,8 @@ export function itemEntryHtml(e, autoPrint) {
     + kvRow("Produced", esc((e.deliverables || []).join("; "))) + (e.link ? kvRow("File", '<a href="' + esc(e.link) + '">' + esc(e.link) + "</a>") : "") + "</table>"
     + ((e.next || []).length ? "<h2>Next steps</h2>" + ulOf(e.next.map(esc)) : "")
     + (e.text ? "<h2>Her notes</h2><div class=txt>" + esc(e.text) + "</div>" : "");
-  return itemDoc("Activity", esc(dayName(e.date)) + " " + esc(fmtD(e.date)), body, "FN Activity " + fmtD(e.date) + " " + String(e.title || "").slice(0, 60), autoPrint);
+  const isMeet = !!e.rec && e.type === "Meeting";   // v812 - a meeting's page is Meeting minutes, not an Activity report
+  return itemDoc(isMeet ? "Meeting" : "Activity", esc(dayName(e.date)) + " " + esc(fmtD(e.date)), body, (isMeet ? "FN Meeting minutes " : "FN Activity ") + fmtD(e.date) + " " + String(e.title || "").slice(0, 60), autoPrint);
 }
 export function itemTaskHtml(t, es, autoPrint) {
   const mine = es.filter((e) => (e.works || []).includes(t.name)).sort((a, b) => (a.date + (a.created || "") < b.date + (b.created || "") ? 1 : -1));
@@ -1244,7 +1413,8 @@ async function itemRoute(env, url, prof) {
   return NF();
 }
 
-export function debriefHtml(e) {
+export function debriefHtml(e, m, o) {
+  o = o || {}; const hrOut = !!(m && m.summary_full && m.summary_full.hr && !o.includeHr) || !!e.hr_hidden;
   const FOOT = "<b>CONFIDENTIAL · FN Realty internal use only.</b> Not to be copied, distributed, modified, reissued or shared outside FN Realty without prior written approval from FN Realty management. © 2026 FN Realty. All rights reserved.";
   const row = (k, v) => v ? '<tr><td>' + k + '</td><td>' + v + '</td></tr>' : '';
   const who = (e.people || []).concat((e.external || []).map((o) => o.name)).map(esc).join(", ");
@@ -1255,14 +1425,27 @@ export function debriefHtml(e) {
     + 'header{background:#1F2B44;color:#C9A97A;margin:-28px -34px 20px;padding:20px 34px}header h1{font-family:Anton,sans-serif;font-weight:400;font-size:22pt;letter-spacing:.02em;margin:0}header p{margin:4px 0 0;color:#EFE5D7;font-size:10pt}'
     + 'h2{font-family:Anton,sans-serif;font-weight:400;color:#1F2B44;font-size:15pt;letter-spacing:.02em;margin:0 0 10px}table{width:100%;border-collapse:collapse;margin:8px 0 14px}td{padding:6px 8px;border-bottom:1px solid #E9EAEC;vertical-align:top}td:first-child{font-weight:600;color:#1F2B44;width:26%}'
     + '.sum{font-size:12pt;margin:0 0 12px}ul{margin:0 0 0 18px;padding:0}footer{margin-top:22px;border-top:1px solid #E9EAEC;padding-top:8px;font-size:7.5pt;color:#626B7C}.pf{position:fixed;bottom:6mm;left:18mm;right:18mm;font-size:7pt;color:#626B7C;display:none}'
-    + '.btn{position:fixed;right:16px;bottom:16px;background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 16px}.btns{display:none}}</style></head><body><div class=pg>'
+    + '.btn{background:#1F2B44;color:#C9A97A;border:0;border-radius:99px;padding:10px 18px;font:600 10pt Inter,sans-serif;cursor:pointer}@media print{body{background:#fff}.pg{padding:0;max-width:none}header{margin:0 0 16px}.btns{display:none}}</style></head><body><div class=pg>'
     + '<header><h1>DEBRIEF</h1><p>Serah Najjuko Ganyana · Strategic Lead – Marketing, PR &amp; Business Development</p></header>'
     + '<h2>' + esc(e.title) + '</h2><p class=sum>' + esc(e.summary) + '</p>'
     + '<table>' + row('When', esc(dayName(e.date)) + ' ' + esc(fmtD(e.date)) + (e.time_of_day && e.time_of_day !== "Unspecified" ? ', ' + esc(e.time_of_day.toLowerCase()) : '')) + row('Type', esc(e.type)) + row('Who', who || (e.alone ? 'Najjuko alone' : ''))
     + row('Role', e.in_scope === false ? 'Outside her role' + (e.out_role ? ' (' + esc(e.out_role) + ')' : '') : 'Within her role') + row('Progress', tasks) + row('Produced', (e.deliverables || []).map(esc).join('; ')) + (e.link ? row('File', '<a href="' + esc(e.link) + '">' + esc(e.link) + '</a>') : '') + '</table>'
     + ((e.next || []).length ? '<h2 style="font-size:12pt">NEXT STEPS</h2><ul>' + e.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '')
+    + (m ? meetingInDebrief(m, o, hrOut) : '')
     + '<div class=note style="margin-top:22px;padding-top:8px;border-top:1px solid #E9EAEC;font-size:7.8pt;color:#626B7C;line-height:1.45">Prepared by Serah Najjuko Ganyana for FN Realty. The method, templates and tools that produced this debrief are her own (employment contract, clause 12.2) and are not part of what is provided.</div>'
     + '</div><div class=btns style="position:fixed;right:14px;bottom:14px;display:flex;gap:8px"><button class=btn id=bk>&#8592; Back</button>' + PDF_TOOLS + '</div><script>' + BACK_JS + '</script></body></html>';
+}
+// v812 - a debrief opened from a recorded meeting shows the meeting: the overall summary, the action points and a link to the full minutes
+function meetingInDebrief(m, o, hrOut) {
+  const k = encodeURIComponent(o.key || ""), link = '<p style="margin-top:10px"><a href="/momo/work/rec/minutes?id=' + encodeURIComponent(m.id) + '&key=' + k + '">Full minutes</a> &middot; <a href="/momo/work/rec/view?id=' + encodeURIComponent(m.id) + '&key=' + k + '">The meeting</a></p>';
+  if (hrOut) return '<h2 style="font-size:12pt;margin-top:16px">THE MEETING</h2><p><b>Confidential · HR.</b> The summary is left out of the debrief. <a href="?' + 'key=' + k + '&hr=1' + '" onclick="location.search=location.search+\'&hr=1\';return false">Include it</a></p>' + link;
+  const sf = m.summary_full, mn = m.minutes, n = m.notes;
+  const paras = sf ? sf.paragraphs : mn ? [mn.purpose].concat(mn.decisions.map((d) => d.headline + ". " + d.detail)) : n && n.summary ? [n.summary] : [];
+  const pts = sf ? sf.bullets.concat(sf.decisions.map((d) => "Decided: " + d)) : mn ? mn.discussion.flatMap((d) => d.bullets.slice(0, 2)) : [];
+  const acts = (m.draft_tasks || []).filter((d) => d.state !== "dismissed");
+  return '<h2 style="font-size:12pt;margin-top:16px">THE MEETING: ' + esc(m.title || "Meeting") + '</h2>' + paras.map((x) => '<p>' + esc(x) + '</p>').join('')
+    + (pts.length ? '<ul>' + pts.slice(0, 15).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '')
+    + (acts.length ? '<h2 style="font-size:12pt;margin-top:12px">ACTION POINTS</h2><ul>' + acts.map((d) => '<li>' + esc(d.text) + ' · ' + (d.owner ? esc(d.owner) : '<b style="color:#8A6F3E">owner needed</b>') + (d.due ? ' · due ' + esc(d.due) : '') + '</li>').join('') + '</ul>' : '') + link;
 }
 // the weekly report: FN Realty's brand (navy #1F2B44, gold #C9A97A, Anton + Inter), internal confidentiality footer on every page
 // v577 (Kendall 14 Oct: "senior management ... fifteen seconds maximum ... donut charts, line charts ... not text heavy") - THE 15-SECOND REPORT.
@@ -1273,8 +1456,55 @@ export function debriefHtml(e) {
 const RAMP = ["#6FBFB4", "#52ADA1", "#3A968A", "#287C71", "#15665C"], TEAL = "#15948A", WARM = "#D9782E", GREY = "#B9B2A3";
 // v582 - Back on a page opened from Momo: close the tab if the app opened it (window.close works on a script-opened tab), else history back,
 // else straight to her Work log
+const longDateW = (d) => { const x = new Date(d + "T00:00:00Z"); return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][x.getUTCDay()] + " " + x.getUTCDate() + " " + ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][x.getUTCMonth()] + " " + x.getUTCFullYear(); };
+// v812 (Najjuko 8 Nov) - the Work home: MY TASKS first (due today and overdue, then this week; Done and Tomorrow in one tap), the quick actions,
+// the last three meetings with their three outputs, and the meeting draft tasks waiting as a chip. Everything else follows below.
+export async function workHomeTop(env, key) {
+  const kq = encodeURIComponent(key), today = dubaiToday(), wkEnd = new Date(Date.parse(today + "T00:00:00Z") + 6 * 864e5).toISOString().slice(0, 10);
+  let tasks = []; try { tasks = applyOverrides(tasksOf(await listEntries(env, "2000-01-01", "2999-12-31")), await taskOverrides(env)).filter((t) => t.status !== "Done" && (t.percent || 0) < 100); } catch (e) {}
+  const due = (t) => t.due || "9999";
+  tasks.sort((a, b) => (due(a) < due(b) ? -1 : due(a) > due(b) ? 1 : a.name < b.name ? -1 : 1));
+  const dueToday = tasks.filter((t) => t.due && t.due <= today), week = tasks.filter((t) => !(t.due && t.due <= today));
+  const ids = []; let cursor; do { const r = await env.MEETINGS.list({ prefix: RECW, cursor }); cursor = r.list_complete ? null : r.cursor; for (const x of r.keys) ids.push(x.name.slice(RECW.length)); } while (cursor);
+  const recent = ids.sort().reverse().slice(0, 40), ms = (await Promise.all(recent.map((x) => recGet(env, x)))).filter((m) => m && !m.archived && m.source !== "huddle_test").sort((a, b) => (String(a.started || a.date) < String(b.started || b.date) ? 1 : -1));
+  const drafts = ms.reduce((n, m) => n + (m.draft_tasks || []).filter((d) => d.state === "draft").length, 0), firstDraft = ms.find((m) => (m.draft_tasks || []).some((d) => d.state === "draft"));
+  const card = (t) => "<div class=htk" + (t.due && t.due < today ? " late" : "") + "><b>" + escH(t.name) + "</b><span>" + (t.due ? (t.due < today ? "overdue · " : t.due === today ? "due today · " : "due ") + escH(t.due) : "no date") + ((t.owners || []).length ? " · " + escH(t.owners.slice(0, 2).join(", ")) : "") + "</span><div class=hb><button type=button data-hdone='" + escH(t.name) + "'>Done</button><button type=button data-hsnz='" + escH(t.name) + "'>Tomorrow</button></div></div>";
+  const list = dueToday.concat(week.filter((t) => !t.due || t.due <= wkEnd)).slice(0, 8);
+  return "<style>.hh{margin:0 0 14px}.hh h2{font:600 .74rem 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A6F3E;margin:6px 0}.hh .cnt{font:500 .86rem 'IBM Plex Sans',sans-serif;color:#5F6B66;margin:0 0 8px}.hg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.htk{border:1px solid #E3DDD1;border-radius:14px;background:#FFFDF9;padding:10px;display:flex;flex-direction:column;gap:4px;min-width:0}.htk.late{border-color:#C5A56A;background:#FBF6EA}.htk b{font:600 .86rem 'IBM Plex Sans',sans-serif;overflow-wrap:anywhere}.htk span{font:500 .72rem 'IBM Plex Sans',sans-serif;color:#5F6B66}.hb{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:auto}.hb button{border:1.5px solid #0A4F4A;background:#fff;color:#0A4F4A;border-radius:9px;padding:6px 2px;font:600 .74rem 'IBM Plex Sans',sans-serif}.hb button:first-child{background:#2F7D5B;border-color:#2F7D5B;color:#fff}"
+    + ".hchip{display:inline-block;background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A;border-radius:99px;padding:4px 12px;font:600 .78rem 'IBM Plex Sans',sans-serif;text-decoration:none;margin:2px 0 8px}.hq{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0}.hq a,.hq button{text-align:center;text-decoration:none;border:1.5px solid #0A4F4A;border-radius:12px;padding:10px 2px;font:600 .8rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;background:#fff}.hq a:first-child,.hq button:first-child{background:#0A4F4A;color:#fff}"
+    + ".hm{border:1px solid #E3DDD1;border-radius:16px;background:#FFFDF9;padding:10px 12px;margin:8px 0}.hm b{display:block;font:600 .9rem 'IBM Plex Sans',sans-serif}.hm span{font:500 .74rem 'IBM Plex Sans',sans-serif;color:#5F6B66}.hm .r3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}.hm .r3 a{text-align:center;text-decoration:none;border:1.5px solid #0A4F4A;border-radius:10px;padding:8px 2px;font:600 .76rem 'IBM Plex Sans',sans-serif;color:#0A4F4A;background:#fff}.hm .r3 a:first-child{background:#0A4F4A;color:#fff}.hall{display:block;text-align:right;color:#0A4F4A;font:600 .86rem 'IBM Plex Sans',sans-serif;text-decoration:none;margin:4px 0 0}#wsort:empty{display:none}</style>"
+    + "<div class=hh id=whome><h2>MY TASKS</h2><p class=cnt id=hcnt>" + tasks.length + " open · " + dueToday.length + " due today" + "</p>"
+    + (drafts ? "<a class=hchip id=hdrafts href='/momo/work/rec/tasks?id=" + encodeURIComponent(firstDraft.id) + "&key=" + kq + "'>" + drafts + " from meetings to review</a>" : "")
+    + (list.length ? "<div class=hg>" + list.map(card).join("") + "</div>" : "<p class=cnt>Nothing due this week.</p>")
+    + "<div class=hq><button type=button id=hqt>+ Quick task</button><a href='#' id=hrec>Record meeting</a><a href='/momo/work/meetings?key=" + kq + "'>Meetings</a></div>"
+    + "<div id=wsort></div>"
+    + "<h2>MEETINGS</h2>" + (ms.length ? ms.slice(0, 3).map((m) => { const q = "?id=" + encodeURIComponent(m.id) + "&key=" + kq; return "<div class=hm><b>" + escH(m.title || "Meeting") + "</b><span>" + escH(m.date) + (m.started_hm ? " · " + escH(m.started_hm) + (m.ended_hm ? "–" + escH(m.ended_hm) : "") : "") + " · " + Math.round((m.secs || 0) / 60) + " min</span><div class=r3><a href='/momo/work/rec/summary" + q + "'>" + (m.summary_full ? "Summary" : "Summary · preparing…") + "</a><a href='/momo/work/rec/minutes" + q + "'>" + (m.minutes ? "Minutes (PDF)" : "Minutes · preparing…") + "</a><a href='/momo/work/rec/transcript" + q + "'>Transcript</a></div></div>"; }).join("") + "<a class=hall href='/momo/work/meetings?key=" + kq + "'>All meetings &#8250;</a>" : "<p class=cnt>No meetings yet.</p>") + "</div>"
+    + "<script>(function(){var KY=" + JSON.stringify(key) + ";function api(b){return fetch('/momo/work/api?key='+encodeURIComponent(KY),{method:'POST',headers:{'Content-Type':'application/json','X-Momo-Confirm':'page'},body:JSON.stringify(b)}).then(function(r){return r.json()})}"
+    + "document.querySelectorAll('[data-hdone]').forEach(function(b){b.onclick=function(){var c=b.closest('.htk');api({action:'task_progress',name:b.getAttribute('data-hdone'),status:'Done',percent:100}).then(function(j){if(j&&!j.error&&c)c.remove()})}});"
+    + "document.querySelectorAll('[data-hsnz]').forEach(function(b){b.onclick=function(){var c=b.closest('.htk');api({action:'task_snooze',name:b.getAttribute('data-hsnz')}).then(function(j){if(j&&j.ok&&c){c.querySelector('span').textContent='due '+j.task.due;c.classList.remove('late')}})}});"
+    + "var q=document.getElementById('hqt');if(q)q.onclick=function(){var x=document.getElementById('qt_btn')||document.querySelector('[data-quick-task],#qtb');if(x)x.click();else location.hash='#wf'};"
+    + "var r=document.getElementById('hrec');if(r)r.onclick=function(e){e.preventDefault();var x=document.getElementById('wrec')||document.querySelector('[id^=wrec]');if(x){x.scrollIntoView({behavior:'smooth'});x.click&&x.click()}else{var f=document.getElementById('wf');if(f)f.scrollIntoView()}};"
+    + "})()</script>";
+}
+// v812 - one cream page shell for the transcript and the meetings list: Back, Share / Save as PDF
+function simpleDoc(title, body, js) {
+  return "<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + escH("FN Realty – " + title) + "</title><meta name=robots content=noindex><style>body{font:16px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#1C2321;background:#FAF7F1;margin:0;padding:0 14px 60px}.w{max-width:720px;margin:0 auto}.bar{position:sticky;top:0;z-index:3;background:#FAF7F1;display:flex;align-items:center;gap:8px;padding:10px 0;max-width:720px;margin:0 auto;border-bottom:1px solid #E3DDD1}.sp{flex:1}.bk{font:inherit;color:#0A4F4A;background:none;border:0;font-weight:600;padding:8px 10px}.bt{font:inherit;font-size:.9rem;padding:9px 14px;border-radius:12px;border:1px solid #0A4F4A;background:#fff;color:#0A4F4A}.bt.pr{background:#0A4F4A;color:#fff}h1{color:#0A4F4A;margin:10px 0 4px;font-family:Fraunces,serif}.m{color:#626B78;font-size:.88rem}.tx{background:#fff;border:1px solid #E3DDD1;border-radius:14px;padding:14px;font-size:.95rem;overflow-wrap:anywhere}"
+    + ".mc{border:1px solid #E3DDD1;border-radius:16px;background:#FFFDF9;padding:12px;margin:10px 0}.mc b{display:block;font-size:1rem}.mc .r3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0 6px}.mc .r3 a{text-align:center;text-decoration:none;border:1.5px solid #0A4F4A;border-radius:10px;padding:9px 2px;font-weight:600;font-size:.8rem;color:#0A4F4A;background:#fff}.mc .r3 a:first-child{background:#0A4F4A;color:#fff}.mc .sec{display:flex;gap:14px;font-size:.78rem}.mc .sec a,.mc .sec button{color:#5F6B66;background:none;border:0;padding:0;font:inherit;text-decoration:underline}"
+    + "@media print{body{background:#fff}.bar,.btr,#tmsg{display:none}.tx{border:0;padding:0}}" + SUMMARY_CSS + "</style></head><body><div class=bar><button class=bk id=bk>&#8592; Back</button><span class=sp></span><button class=bt id=sv>Share</button><button class='bt pr' onclick='print()'>Share / Save as PDF</button></div><div class=w>" + body + "</div><script>" + BACK_JS
+    + "document.getElementById('sv').onclick=function(){var t=document.querySelector('.w').innerText;if(navigator.share)navigator.share({title:document.title,text:t}).catch(function(){});else if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){alert('Copied.')})};" + (js || "") + "</script></body></html>";
+}
+export function meetingCardHtml(m, kq, arch) {
+  const id = encodeURIComponent(m.id), q = "?id=" + id + "&key=" + kq, drafts = (m.draft_tasks || []).filter((d) => d.state === "draft").length;
+  if (m.status === "recording") return "<div class=mc style='border-color:#C5A56A;background:#FBF6EA'><b>Unfinished: tap to finish or resume</b><span class=m>" + escH(m.title || "Recording") + " · " + escH(m.date) + (m.started_hm ? " · started " + escH(m.started_hm) : "") + "</span>"   // v812 - an unfinished recording never vanishes
+    + "<div class=r3 style='grid-template-columns:1fr 1fr'><a href='#' data-fin='" + escH(m.id) + "'>Finish now</a><a href='/momo/work?key=" + kq + "&rec=1'>Resume recording</a></div></div>";
+  return "<div class=mc><b>" + escH(m.title || "Meeting") + "</b><span class=m>" + escH(m.date) + (m.started_hm ? " · " + escH(m.started_hm) + (m.ended_hm ? "–" + escH(m.ended_hm) : "") : "") + " · " + Math.round((m.secs || 0) / 60) + " min" + (m.recovered ? " · Recovered" : "") + (m.summary_full && m.summary_full.hr ? " · Confidential · HR" : "") + (drafts ? " · " + drafts + " draft task" + (drafts === 1 ? "" : "s") : "") + "</span>"
+    + "<div class=r3><a href='/momo/work/rec/summary" + q + "'>" + (m.summary_full ? "Summary" : "Summary · preparing…") + "</a><a href='/momo/work/rec/minutes" + q + "'>" + (m.minutes ? "Minutes (PDF)" : "Minutes · preparing…") + "</a><a href='/momo/work/rec/transcript" + q + "'>Transcript</a></div>"
+    + "<div class=sec><a href='/momo/work/rec/view" + q + "'>Open</a><button type=button data-arc='" + escH(m.id) + "' data-on='" + (arch ? "0" : "1") + "'>" + (arch ? "Bring back" : "Archive") + "</button></div></div>";
+}
 const BACK_JS = 'document.getElementById("bk").onclick=function(){if(window.opener||history.length<=1){window.close()}if(history.length>1){history.back()}else{var k=new URLSearchParams(location.search).get("key")||"";location.href="/momo/work?key="+encodeURIComponent(k)}};';
 // v580 - FN's own marks, cut from the Company Template she sent (src/fn_logo.js): the navy monogram, the gold lattice band, FN navy/peach/gold
+import { attachDraftTasks, draftTasksPage, draftTasksWidget } from "./draft_tasks.js";
+import { buildSummaryFull, glossary, applyNameFix, rememberNameFix, readNameFix, shareSafeEntry, summaryBlock, editBox, SUMMARY_CSS, SUMMARY_JS, HR_LINE, CHECK_NAME } from "./meeting_summary.js";   // v812 - the overall meeting summary   // v812 - draft tasks from the minutes (never auto-added)
 import { planRoute } from "./work_plan.js";
 import { syncPropose, syncApply, syncSheet, SYNC_JS, autoScan, autoAnswer, autoBadges, matchToChanges } from "./meeting_sync.js";
 import { readItems as readPlannerItems, readSettings as readPlannerSettings, derive as derivePlanner, plannerChecksNow } from "./content_planner.js";   // v781 / v782 Today card
@@ -1547,7 +1777,7 @@ const WORK_BODY = '<div class=tag>MOMO · WORK</div>'
   + '<div class=wk id=wkhead></div><div id=wtoday></div><div id=wtoday2></div>'
   + '<form id=wf class=box><label>What did you do? <button type=button id=wmic class=mic aria-label="Speak instead of typing"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Speak</span></button></label><textarea id=wt rows=4 placeholder="e.g. Monday huddle: built the PowerPoint, ran the meeting with Ali and the team, laid out the week."></textarea>'
   + '<div class=row><input id=wd type=date><label class=ghost id=wupl style="text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width=16 height=16 fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg><span>Upload a file</span><input id=wfile type=file accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,image/*" style="display:none"></label></div>' + REC_BTN + '<div class=row2><button type=button id=wreset class=ghost>Start over</button><button type=submit id=wb class=gold>File it</button></div></form>'
-  + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Today\'s summary</a>'
+  + '<div id=wprev></div><a id=wday class=gold style="display:block;text-align:center;text-decoration:none;margin-top:12px" target=_blank>Daily report</a>'
   + '<a href="/momo/work/prep?key=__KEY__" class=ghost style="display:block;text-align:center;text-decoration:none;margin-top:8px">Prepare me for a client, project or open house</a>'
   + '<div class=sec>MY TASKS</div><div id=wtasks></div>'
   + '<div class=sec>BY DEPARTMENT · OPEN TASKS, LONGEST QUIET FIRST</div><div id=wdept></div>'
@@ -1690,6 +1920,7 @@ function draw(){var days=Math.round((Date.parse(D.review_due)-Date.parse(D.today
   +(e.deliverables.length?'<div class=m style="margin-top:6px">Produced: '+esc(e.deliverables.join("; "))+'</div>':'')+(e.link?'<div class=m><a style="color:#C5A56A" href="'+esc(e.link)+'" target=_blank rel=noopener>Open the file</a></div>':'')
   +((e.external||[]).length?e.external.slice(0,2).map(function(o){return '<a class=mic style="text-decoration:none;margin:8px 6px 2px 0" href="/momo/work/vet?key='+encodeURIComponent(KEY)+'&name='+encodeURIComponent(o.name)+'&hint='+encodeURIComponent(o.kind||"")+'">Vet '+esc(o.name.split(" ").slice(0,2).join(" "))+' &#8594;</a>'}).join("")+'<br>':'')
   +(e.prep&&e.prep.needed?'<a class=mic style="text-decoration:none;margin:8px 0 2px" href="/momo/work/prep?key='+encodeURIComponent(KEY)+'&dev='+encodeURIComponent(e.prep.developer||"")+'&project='+encodeURIComponent(e.prep.project||"")+'&area='+encodeURIComponent(e.prep.area||"")+'&event='+encodeURIComponent(e.prep.event||e.title)+'">Prepare me &#8594;</a><br>':'')
+  +(e.rec?'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:8px 0 6px">'+['summary','minutes','transcript'].map(function(k,j){return '<a style="text-align:center;text-decoration:none;border:1.5px solid #0A4F4A;border-radius:10px;padding:9px 2px;font:600 .8rem IBM Plex Sans,sans-serif;'+(j?'color:#0A4F4A;background:#fff':'color:#fff;background:#0A4F4A')+'" href="/momo/work/rec/'+k+'?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.rec)+'">'+['Summary','Minutes (PDF)','Transcript'][j]+'</a>'}).join('')+'</div>':'')   // v812 - Summary / Minutes (PDF) / Transcript on the meeting card
   +'<a class="del fnpdf" style="text-decoration:none" href="/momo/work/item/entry?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.date+'_'+e.id)+'" target=_blank>'+FNPDF+'FN Realty PDF</a> &middot; '+'<a class=del style="text-decoration:none" href="/momo/work/debrief?key='+encodeURIComponent(KEY)+'&id='+encodeURIComponent(e.id)+'&date='+e.date+'" target=_blank>Debrief</a> &middot; '+(e.type==="Meeting"?'<button class=del data-sy="'+esc(e.date+'_'+e.id)+'" style="color:#0A4F4A;font-weight:600">Sync</button> &middot; ':'')+'<button class=del data-e='+i+'>Edit</button> &middot; <button class=del data-d='+i+'>Delete</button></div>'}).join(""):'<p style="color:#8FA39B">Nothing logged this week yet.</p>';
  $("wlist").querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-d")];if(!confirm("Delete \""+e.title+"\"?"))return;api({action:"delete",id:e.id,date:e.date}).then(function(){load(WEEK)})}});
  $("wlist").querySelectorAll("[data-e]").forEach(function(b){b.onclick=function(){var e=D.entries[+b.getAttribute("data-e")];EDIT=e;$("wt").value=e.text;$("wd").value=e.date;if($("wl"))$("wl").value=e.link||"";preview(e);scrollTo(0,0)}});
@@ -1719,6 +1950,7 @@ function nextInQueue(){QI++;if(QI<QUEUE.length){preview(QUEUE[QI]);scrollTo(0,0)
 var SHEET=null;
 function sheet(title,html,onopen){var bg=document.createElement("div");bg.className="sheetbg";var s=document.createElement("div");s.className="sheet";s.innerHTML='<h4>'+title+'</h4>'+html+'<button type=button class="gold done">Done</button>';
  document.body.appendChild(bg);document.body.appendChild(s);SHEET=function(){bg.remove();s.remove();SHEET=null;preview(PREV)};bg.onclick=SHEET;s.querySelector(".done").onclick=SHEET;if(onopen)onopen(s)}
+window.addEventListener("beforeunload",function(ev){var t=document.getElementById("wt"),d=null;try{d=localStorage.getItem("momo_work_draft")}catch(x){}if(t&&t.value.trim()&&d){ev.preventDefault();ev.returnValue="";return ""}});   // v812 - never leave typed text without a warning
 function opt(v,nm,on,ic){return '<div class="opt'+(on?' on':'')+'" data-v="'+esc(v)+'">'+(ic||'')+esc(nm)+(on?'<span style="margin-left:auto;color:#0A4F4A">&#10003;</span>':'')+'</div>'}
 function kpiOf(id){return D.kpis.filter(function(k){return k.id===id})[0]}
 function brokerLabel(id){var r="";(D.broker_tasks||[]).forEach(function(g){g.items.forEach(function(i){if(i[0]===id)r=i[1]})});return r}
@@ -1792,7 +2024,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));saveDraft();PREV.works=PR
  +(PREV.deliverables.length?lab("task","Produced")+'<div class=line>'+esc(PREV.deliverables.join("; "))+'</div>':'')
  +(PREV.next.length?lab("out","Next steps")+'<div class=line>'+esc(PREV.next.join("; "))+'</div>':'')
  +'<div class=acts style="margin-top:14px"><button type=button class=ghost id=pc>'+(QUEUE.length>1?'Skip this one':'Cancel')+'</button></div></details></div>'
- +'<button type=button class=tick id=pv aria-label="Save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg></button>';
+ +'<button type=button class=tick id=pv aria-label="Save to my work log" style="width:auto;min-width:0;padding:0 16px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font:600 .92rem IBM Plex Sans,sans-serif"><svg viewBox="0 0 24 24" width=18 height=18 fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg><span>Save</span></button><p id=pvwhy style="color:#B4533C;font:500 .85rem IBM Plex Sans,sans-serif;margin:6px 0 0"></p>';
  $("wprev").innerHTML=h;
  $("ps").onchange=function(){PREV.summary=this.value};
  $("sw").onclick=function(){PREV.in_scope=true;PREV.out_role="";PREV.broker=false;preview(PREV)};$("so").onclick=function(){PREV.in_scope=false;PREV.broker=false;PREV.kpis=[];preview(PREV)};
@@ -1827,7 +2059,7 @@ function preview(e){PREV=JSON.parse(JSON.stringify(e));saveDraft();PREV.works=PR
   if(!qa.length)return;var one=(e.summary||$("wt").value).trim()+"\n\n"+qa.join("\n");$("pa").disabled=true;$("pa").textContent="Refiling…";
   api({action:"parse",text:one,date:$("wd").value}).then(function(j){if(j.entry){j.entry.src=one;if(QUEUE.length)QUEUE[QI]=j.entry;preview(j.entry)}})};
  $("pc").onclick=function(){clearDraft();EDIT=null;if(QUEUE.length>1)nextInQueue();else{QUEUE=[];QI=0;$("wprev").innerHTML=""}};
- $("pv").onclick=function(){PREV.summary=$("ps").value;if(PREV.in_scope!==false&&!PREV.broker&&!PREV.kpis.length){alert("Tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){alert("Tap whose job it was.");return}$("pv").disabled=true;$("pv").classList.add("saving");
+ $("pv").onclick=function(){PREV.summary=$("ps").value;var why=function(t){var w=$("pvwhy");if(w)w.textContent="Not saved yet: "+t;toast("Not saved yet: "+t,true)};if(PREV.in_scope!==false&&!PREV.broker&&!PREV.kpis.length){why("tap which part of your role this counts towards, or mark it outside your role.");return}if(PREV.in_scope===false&&!PREV.out_role){why("tap whose job it was.");return}$("pv").disabled=true;$("pv").classList.add("saving");
   api({action:"save",entry:PREV,text:PREV.src||$("wt").value,date:$("wd").value,link:($("wl")?$("wl").value:""),id:EDIT&&EDIT.id,oldDate:EDIT&&EDIT.date,created:EDIT&&EDIT.created,rec:PREV.src_rec||""}).then(function(j){if(!j.ok){toast("Not saved: "+(j.error||"something went wrong")+". What you wrote is still here; tap the tick again.",true);$("pv").disabled=false;$("pv").classList.remove("saving");return}
    var _dn=new Date(j.entry.date+"T00:00:00Z"),_lab=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][_dn.getUTCDay()]+" "+_dn.getUTCDate()+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][_dn.getUTCMonth()];
    toast("\u2713 Saved: "+(j.entry.title||"your entry")+" is filed under "+_lab+".");var _tk=$("pv");if(_tk){_tk.classList.remove("saving");_tk.classList.add("saved");setTimeout(function(){var t2=$("pv");if(t2)t2.classList.remove("saved")},1800)}if(!(QUEUE.length>1&&QI<QUEUE.length-1))clearDraft();

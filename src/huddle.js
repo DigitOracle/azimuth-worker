@@ -14,6 +14,18 @@
 // Close writes a meeting record into her Momo Meetings store: recw_<id> + recs_<id>_000 (the segment notes as its text), status "transcribed" with
 // auto_file_off, so nothing goes into her work log by itself; the standard minutes come from the record's existing Minutes action (/momo/work/rec/minutes).
 
+// v812 (Kendall approved 8 Nov): (1) MOMO PREPARES THE HUDDLE - on creation the card carries Momo's drafts (c.momo), each accepted with one tap like
+// "drafted by Claude": market topics ranked and the top 4 pre-ticked with a one-line why; recognition counts and first names from her own work log and
+// campaign replies; the UAE days of the week (birthdays stay hers to paste); the schedule from her read-only Google Calendar when it is connected;
+// three theme directions from last week's notes and numbers (deterministic, no model call). (2) LAST WEEK'S ACTIONS FIRST - Close keeps the actions;
+// the next card opens presenter mode on them (done / not done / carry forward; carried items join this week's actions; no owner = gold "owner needed").
+// (3) ONE INPUT, THREE OUTPUTS - her 4 market picks also make a DRAFT Monday market-research item in her Content Planner (never published) and are
+// exposed on the bridge as market_for_pdf for her Claude's team market PDF.
+import { applyAction as plannerSave } from "./content_planner.js";
+import { SEED as PLAN_SEED } from "./work_plan.js";
+import { BRIDGE_LOG as WL, PEOPLE as WL_PEOPLE, BROKER_TASKS } from "./work_log.js";
+import { draftTasksFrom } from "./draft_tasks.js";
+
 export const HUD = "hud_card_", HUD_IDX = "hud_index", HUD_FILE = "hud_file_";
 export const STATUSES = ["Draft", "Filling", "Ready to build", "Built", "Approved", "Presented", "Closed"];
 export const MAX_FILE = 15 * 1024 * 1024, MAX_SLIDES = 15, MAX_TOPICS = 20, PICKS = 4, MAX_FORM_BYTES = 200000;
@@ -109,31 +121,113 @@ export async function cardIndex(env) { try { return JSON.parse(await env.MEETING
 async function prevCard(env, date) { const idx = (await cardIndex(env)).filter((d) => d < date); return idx.length ? getCard(env, idx[idx.length - 1]) : null; }
 
 // a new card for Monday <date>, copied from last week's form, with the dates filled in
-export async function createCard(env, date, nowIso) {
+export async function createCard(env, date, nowIso, deps) {
   const have = await getCard(env, date); if (have) return have;
   const prev = await prevCard(env, date), form = prev ? clone(prev.form) || {} : {};
   for (const k of DATE_FIELDS) if (k in form) form[k] = date;
   if (Array.isArray(form.skip_slides)) form.skip_slides = [];   // a skip is for one week only
   const c = { v: 1, date, status: "Draft", created: nowIso || new Date().toISOString(), prev_date: prev ? prev.date : "", form, sections: {}, drafted: {},
-    market: { topics: [], picked: [] }, build: null, build_requested: null, approved: null, presenter: { done: {}, notes: {} }, record_id: "", log: [] };
+    market: { topics: [], picked: [], why: {}, momo_pending: false, by: "" }, build: null, build_requested: null, approved: null, presenter: { done: {}, notes: {} }, record_id: "", log: [],
+    // v812 - last week's open actions, reviewed first in presenter mode; this week's actions (carried ones join automatically)
+    last_actions: prev ? (prev.actions || []).filter((x) => x.status !== "done").map((x) => Object.assign({}, x, { review: "" })) : [], actions: [] };
+  try { await prefill(env, c, prev, deps || {}); } catch (e) { c.momo = c.momo || { notes: ["Momo could not prepare the drafts this time."] }; }
   await putCard(env, c); return c;
 }
 // the minute tick: on Thursday (and through Monday, if it was missed) the card for the next Monday appears
-export async function huddleTick(env, nowMs) {
+export async function huddleTick(env, nowMs, deps) {
   const today = dubaiToday(nowMs); if (!inCreateWindow(today)) return null;
   const date = mondayFor(today); if (await env.MEETINGS.get(HUD + date)) return null;
-  return createCard(env, date, new Date(nowMs || Date.now()).toISOString());
+  return createCard(env, date, new Date(nowMs || Date.now()).toISOString(), deps);
+}
+
+// ---- v812 MOMO PREPARES THE HUDDLE -----------------------------------------------------------------------------------------------------------------------
+// market ranking (deterministic): newest data first, a figure in the line, not provisional, one topic per table among the top four
+const KIND_RANK = ["sales", "off-plan", "offplan", "launch", "rent", "area", "developer"];
+export function rankTopics(topics) {
+  const sc = (t) => { let s = 0; const k = (t.kind + " " + t.table).toLowerCase(), i = KIND_RANK.findIndex((x) => k.includes(x));
+    if (t.as_of) s += Date.parse(t.as_of) / 864e5 / 1000; if (/\d/.test(t.line)) s += 3; if (!t.provisional) s += 2; if (i >= 0) s += (KIND_RANK.length - i) * 0.3; return s; };
+  const sorted = topics.slice().sort((a, b) => sc(b) - sc(a) || (a.id < b.id ? -1 : 1)), top = [], used = new Set();
+  for (const t of sorted) { if (top.length < PICKS && !used.has(t.table)) { top.push(t); used.add(t.table); } }
+  for (const t of sorted) if (top.length < PICKS && !top.includes(t)) top.push(t);
+  const why = {};
+  for (const t of top) why[t.id] = [t.as_of ? "newest data (" + t.as_of + ")" : "", /\d/.test(t.line) ? "has a figure" : "", t.provisional ? "provisional: check it" : "verified source", t.table ? "from " + t.table : ""].filter(Boolean).join(", ");
+  return { order: sorted.map((t) => t.id), top: top.map((t) => t.id), why };
+}
+function momoMarket(c) {
+  if (!c.market.topics.length || c.market.by === "her") return;
+  const r = rankTopics(c.market.topics); c.market.picked = r.top; c.market.why = r.why; c.market.momo_pending = r.top.length > 0;
+  c.market.topics = r.order.map((id) => c.market.topics.find((t) => t.id === id));
+}
+const firstName = (n) => String(n || "").trim().split(/\s+/)[0];
+const DEAL_IDS = new Set(((BROKER_TASKS.find((g) => g.group === "Deals") || {}).items || []).map((i) => i[0]));
+const VIEW_IDS = new Set(((BROKER_TASKS.find((g) => g.group === "Viewings") || {}).items || []).map((i) => i[0]));
+async function campReplies(env) {
+  let idx = []; try { idx = JSON.parse(await env.MEETINGS.get("camp_index")) || []; } catch (e) {}
+  let n = 0; for (const id of idx) { try { n += Number((JSON.parse(await env.MEETINGS.get("camp_stats_" + id)) || {}).replies) || 0; } catch (e) {} }
+  return { total: n, campaigns: idx.length };
+}
+async function prefill(env, c, prev, deps) {
+  const M = { notes: [] }, from = addDays(c.date, -7), to = addDays(c.date, -1);
+  // recognition: counts and first names already in her Momo work log, plus campaign replies since last week's card
+  const es = await WL.listEntries(env, from, to), known = new Set(WL_PEOPLE.map((p) => p[0]));
+  let deals = 0, views = 0, meets = 0; const ppl = {};
+  for (const e of es) { const bt = Array.isArray(e.broker_tasks) ? e.broker_tasks : [];
+    if (bt.some((x) => DEAL_IDS.has(x))) deals++; if (bt.some((x) => VIEW_IDS.has(x))) views++; if (e.type === "Meeting") meets++;
+    for (const p of Array.isArray(e.people) ? e.people : []) if (known.has(p)) ppl[firstName(p)] = (ppl[firstName(p)] || 0) + 1; }
+  const cr = await campReplies(env), prevTotal = prev && prev.momo_snap ? prev.momo_snap.camp_replies : null;
+  c.momo_snap = { camp_replies: cr.total };
+  const rec = [];
+  if (es.length) rec.push("Last week in Momo: " + deals + " deal step" + (deals === 1 ? "" : "s") + " logged, " + views + " viewing" + (views === 1 ? "" : "s") + ", " + meets + " meeting" + (meets === 1 ? "" : "s") + ".");
+  if (cr.campaigns && prevTotal != null) rec.push((cr.total - prevTotal) + " campaign repl" + (cr.total - prevTotal === 1 ? "y" : "ies") + " this week.");
+  else if (cr.campaigns) rec.push(cr.total + " campaign replies so far (weekly count starts next week).");
+  const top = Object.entries(ppl).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 3).map((x) => x[0]);
+  if (top.length) rec.push("Worked with most: " + top.join(", ") + ".");
+  M.recognition = rec.length ? { lines: rec, accepted: false } : null;
+  if (!rec.length) M.notes.push("No work-log entries last week, so no recognition draft.");
+  // celebrations: only the UAE days of the week (birthdays are HR data: she pastes them)
+  const end = addDays(c.date, 6), days = PLAN_SEED.filter((s) => s[1] <= end && s[2] >= c.date && (Date.parse(s[2]) - Date.parse(s[1])) / 864e5 <= 3).map((s) => s[3] + " (" + niceDate(s[1] < c.date ? c.date : s[1]) + ")");
+  M.celebrations = days.length ? { lines: days, accepted: false, note: "Birthdays: paste them yourself (HR data)." } : null;
+  // schedule: her read-only Google Calendar, Monday to Thursday, when it is connected
+  if (deps.cal) {
+    const out = [];
+    for (let i = 0; i < 4; i++) { const d = addDays(c.date, i); let v = null; try { v = await deps.cal(env, d); } catch (e) {}
+      if (!v || !v.connected) { out.length = 0; M.notes.push("Calendar not connected: schedule left for you."); break; }
+      const ev = (v.events || []).slice(0, 4).map((x) => (x.all_day ? "" : x.time + " ") + x.title);
+      out.push(niceDate(d) + ": " + (ev.length ? ev.join("; ") : "nothing booked")); }
+    M.schedule = out.length ? { lines: out, accepted: false } : null;
+  } else { M.schedule = null; M.notes.push("Calendar not read here: schedule left for you."); }
+  // theme: three directions from last week's notes and numbers (no model call; her Claude can refine them through the bridge)
+  const th = [];
+  if (es.length) th.push("Build on last week: " + views + " viewings and " + deals + " deal steps. What turned a viewing into an offer?");
+  const open = c.last_actions.length; if (open) th.push("Finish what we started: " + open + " open action" + (open === 1 ? "" : "s") + " from last Monday.");
+  const pn = prev && prev.presenter ? Object.values(prev.presenter.notes || {}).map(String).join(" ") : "";
+  const q = /([^.?!]*\?)/.exec(pn); if (q) th.push("Answer last week's question: " + q[1].trim().slice(0, 120));
+  for (const g of ["Speed wins: reply to every lead in 10 minutes.", "One client, one follow-up, every day.", "Know the market: one figure each before every call."]) if (th.length < 3) th.push(g);
+  M.theme = { lines: th.slice(0, 3), accepted: false };
+  c.momo = M; momoMarket(c);
+}
+
+// ---- v812 one input, three outputs: her 4 picks -> the Content Planner draft + the team market PDF list ----------------------------------------------------
+async function marketOutputs(env, c) {
+  if ((c.market.picked || []).length !== PICKS || c.market.momo_pending) return;
+  const ts = c.market.picked.map((id) => c.market.topics.find((t) => t.id === id)).filter(Boolean);
+  const b = { action: "save", kind: "feed", date: c.date, time: "10:00", format: "Carousel", series: "Market research", added: true,
+    topic: ("Market research: " + ts.map((t) => t.line).join(" | ")).slice(0, 400),
+    note: ("DRAFT from the Monday Huddle " + c.date + ". Sources: " + ts.map((t) => "(" + t.table + ", data as of " + t.as_of + ")" + (t.provisional ? " provisional" : "")).join("; ") + ". Never published from here.").slice(0, 400) };
+  if (c.cp_code) b.code = c.cp_code;
+  try { const [s, o] = await plannerSave(env, b, "Najjuko"); if (s < 300 && o.item) c.cp_code = o.item.code; } catch (e) {}
+  c.market.for_pdf = true;
 }
 // the card the bridge and the page call "next": this Monday's (or the coming one's) once it exists, else last Monday's while it is still open
-export async function nextCard(env, nowMs) {
+export async function nextCard(env, nowMs, deps) {
   const today = dubaiToday(nowMs), date = mondayFor(today);
-  if (inCreateWindow(today)) return (await getCard(env, date)) || (await createCard(env, date));
+  if (inCreateWindow(today)) return (await getCard(env, date)) || (await createCard(env, date, undefined, deps));
   const idx = await cardIndex(env), last = idx.filter((d) => d < today).pop(), lc = last ? await getCard(env, last) : null;
   if (lc && lc.status !== "Closed") return lc;
   return { date, status: "Not created yet", creates_on: addDays(date, -4), stub: true };
 }
 
-const sectionDone = (c, sid) => sid === "market" ? (c.market.picked || []).length === PICKS : !!(c.sections[sid] && c.sections[sid].state);
+const sectionDone = (c, sid) => sid === "market" ? (c.market.picked || []).length === PICKS && !c.market.momo_pending :!!(c.sections[sid] && c.sections[sid].state);
 export function recompute(c) {
   if (["Approved", "Presented", "Closed"].includes(c.status) || c.status === "Built") return c;
   const touched = Object.keys(c.sections).length || (c.market.picked || []).length || Object.keys(c.drafted || {}).length;
@@ -159,7 +253,9 @@ export function cardOut(c) {
   return { date: c.date, status: c.status, next_step: nextStep(c), form: c.form, skip_slides: Array.isArray(c.form.skip_slides) ? c.form.skip_slides : [],
     sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, done: sectionDone(c, s.id), state: (c.sections[s.id] || {}).state || "", keys: keysOf(s.id, c.form) })),
     unmapped_keys: Object.keys(c.form).filter((k) => k !== "skip_slides" && !sectionOfKey(k)),
-    market: { topics: c.market.topics, picked: c.market.picked }, drafted_by_claude: Object.keys(c.drafted || {}),
+    market: { topics: c.market.topics, picked: c.market.picked, why: c.market.why || {}, momo_pending: !!c.market.momo_pending, cp_code: c.cp_code || "" }, drafted_by_claude: Object.keys(c.drafted || {}),
+    momo: c.momo || null, last_actions: c.last_actions || [], actions: c.actions || [],   // v812
+    market_for_pdf: c.market.for_pdf ? c.market.picked.map((id) => c.market.topics.find((t) => t.id === id)).filter(Boolean) : [],   // v812 - her Claude builds the team market PDF from these
     placeholders: ph, build_requested: c.build_requested, build: c.build ? { at: c.build.at, placeholders: c.build.placeholders, has_pdf: !!c.build.pdf, has_pptx: !!c.build.pptx, slides: c.build.slides || 0 } : null,
     approved: !!c.approved, hosts: HOSTS };
 }
@@ -184,7 +280,7 @@ export async function cardAction(env, b, nowIso) {
   const c = await getCard(env, b.date); if (!c) return [404, { ok: false, error: "There is no huddle card for that date." }];
   const now = nowIso || new Date().toISOString(), a = String(b.action || ""), sid = String(b.section || "");
   const locked = ["Presented", "Closed"].includes(c.status);
-  const formActs = ["same", "edit", "skip", "pick", "accept"];
+  const formActs = ["same", "edit", "skip", "pick", "accept", "accept_momo"];
   if (locked && formActs.includes(a)) return [409, { ok: false, error: "This huddle has been presented; the form is closed." }];
   if (formActs.includes(a) && a !== "pick" && a !== "accept" && !SEC[sid]) return [400, { ok: false, error: "Which section?" }];
   if (a === "same") {
@@ -209,7 +305,22 @@ export async function cardAction(env, b, nowIso) {
   } else if (a === "pick") {
     const ids = (Array.isArray(b.ids) ? b.ids : []).map(String), known = new Set(c.market.topics.map((t) => t.id)), pick = [...new Set(ids)].filter((i) => known.has(i));
     if (pick.length > PICKS) return [400, { ok: false, error: "Pick " + PICKS + " topics." }];
-    c.market.picked = pick; logIt(c, "pick " + pick.length); formChanged(c);
+    c.market.picked = pick; c.market.momo_pending = false; c.market.by = "her"; logIt(c, "pick " + pick.length); formChanged(c); await marketOutputs(env, c);
+  } else if (a === "accept_momo") {   // v812 - one tap accepts Momo's draft for a section
+    if (sid === "market") { if (!c.market.momo_pending) return [409, { ok: false, error: "Nothing to accept." }]; c.market.momo_pending = false; c.market.by = "her"; await marketOutputs(env, c); }
+    else { const d = c.momo && c.momo[sid]; if (!d || !d.lines) return [404, { ok: false, error: "Momo has no draft for that section." }]; d.accepted = true; c.sections[sid] = { state: "momo", at: now }; }
+    logIt(c, "accept momo " + sid); formChanged(c);
+  } else if (a === "review") {   // v812 - last week's action: done / notdone / carry (carried items join this week's actions)
+    const x = (c.last_actions || []).find((y) => y.id === String(b.id || "")), v = String(b.verdict || "");
+    if (!x || !["done", "notdone", "carry"].includes(v)) return [400, { ok: false, error: "Which action, and done, not done or carry?" }];
+    x.review = v; if (b.owner != null) x.owner = String(b.owner).slice(0, 40);
+    c.actions = (c.actions || []).filter((y) => y.id !== x.id);
+    if (v === "carry") c.actions.push({ id: x.id, text: x.text, owner: x.owner || "", status: "open", from: "carried" });
+    logIt(c, "review " + v);
+  } else if (a === "action_add") {
+    const t = String(b.text || "").trim().slice(0, 200); if (!t) return [400, { ok: false, error: "What is the action?" }];
+    c.actions = (c.actions || []).concat({ id: "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text: t, owner: String(b.owner || "").trim().slice(0, 40), status: "open", from: "huddle" });
+    logIt(c, "action added");
   } else if (a === "accept") {
     const ks = b.key ? [String(b.key)] : Object.keys(c.drafted); ks.forEach((k) => delete c.drafted[k]); logIt(c, "accept drafts"); recompute(c);
   } else if (a === "request_build") {
@@ -218,6 +329,7 @@ export async function cardAction(env, b, nowIso) {
   } else if (a === "approve") {
     if (c.status !== "Built") return [409, { ok: false, error: c.status === "Approved" ? "Already approved." : "Build the preview first." }];
     if (Object.keys(c.drafted).length) return [409, { ok: false, error: "Accept or edit the text drafted by Claude first." }];
+    if (c.market.momo_pending) return [409, { ok: false, error: "Accept or change Momo's 4 market topics first." }];
     c.status = "Approved"; c.approved = { at: now, by: "najjuko" }; logIt(c, "approved");
   } else if (a === "seg") {
     const n = String(b.n || ""); if (!SEGMENTS.some((s) => s.n === n)) return [400, { ok: false, error: "Which segment?" }];
@@ -240,10 +352,22 @@ async function closeToRecord(env, c, nowIso) {
   const compact = c.date.replace(/-/g, ""), id = compact + "hud" + Math.random().toString(36).slice(2, 7);
   const theme = THEME_TITLE_KEY && typeof c.form[THEME_TITLE_KEY] === "string" ? c.form[THEME_TITLE_KEY].trim().slice(0, 60) : "";
   const lines = SEGMENTS.filter((s) => !segHidden(c, s)).map((s) => "Segment " + s.n + " " + s.name + (c.presenter.done[s.n] ? " (done)" : "") + ": " + (String(c.presenter.notes[s.n] || "").trim() || "no notes"));
-  const text = "Monday Huddle " + c.date + (theme ? ", theme: " + theme : "") + ". Hosts: " + HOSTS.join(", ") + ".\n" + lines.join("\n");
+  let text = "Monday Huddle " + c.date + (theme ? ", theme: " + theme : "") + ". Hosts: " + HOSTS.join(", ") + ".\n" + lines.join("\n");
   const m = { id, date: c.date, title: ("Monday Huddle" + (theme ? " · " + theme : "")).slice(0, 90), started_hm: "", started: nowIso, status: "transcribed", secs: 0,
     source: "huddle", huddle_date: c.date, auto_file_off: true, attendees: [], notes: null, minutes: null,
     added_notes: SEGMENTS.filter((s) => String(c.presenter.notes[s.n] || "").trim()).map((s) => ({ at: nowIso, text: s.n + " " + s.name + ": " + String(c.presenter.notes[s.n]).trim().slice(0, 2000) })) };
+  // v812 - the actions: those added in the room (and carried), plus any "Action: ... @Owner" line in a segment note; they go to next Monday's review and,
+  // as DRAFT tasks, onto the meeting record (the same draft-tasks step as a recording's minutes: nothing becomes a task without her tap)
+  const have = new Set((c.actions || []).map((x) => x.text.toLowerCase()));
+  for (const s of SEGMENTS) for (const ln of String(c.presenter.notes[s.n] || "").split(/\n|(?=Action:)/i)) {
+    const mm = /^\s*action:\s*(.+?)(?:\s+@([A-Za-z][\w .'-]{0,30}))?\s*$/i.exec(ln); if (!mm || have.has(mm[1].toLowerCase())) continue;
+    have.add(mm[1].toLowerCase()); c.actions = (c.actions || []).concat({ id: "a" + Math.random().toString(36).slice(2, 9), text: mm[1].slice(0, 200), owner: (mm[2] || "").trim(), status: "open", from: "notes" });
+  }
+  const names = WL_PEOPLE.map((p) => p[0]);
+  m.draft_tasks = draftTasksFrom((c.actions || []).map((x) => ({ action: x.text, owner: x.owner, due: "" })), names, null);
+  m.actions = (c.actions || []).map((x) => ({ text: x.text, owner: x.owner }));
+  const al = (c.actions || []).map((x) => "Action: " + x.text + (x.owner ? " (" + x.owner + ")" : " (owner needed)"));
+  if (al.length) text = text + "\n" + al.join("\n");
   await env.MEETINGS.put("recs_" + id + "_000", JSON.stringify({ n: 0, secs: 0, text }));
   await env.MEETINGS.put("recw_" + id, JSON.stringify(m));
   return id;
@@ -273,7 +397,7 @@ export async function huddleBridge(env, method, name, b, nowMs) {
     if (!f && topics == null) return [400, { ok: false, code: "empty", error: "Send form (an object of DNA keys) and/or market_topics." }];
     if (f) { for (const k of Object.keys(f)) { if (k === "skip_slides") continue; c.form[k] = clone(f[k]); c.drafted[k] = true; } }
     if (JSON.stringify(c.form).length > MAX_FORM_BYTES) return [413, { ok: false, code: "too_big", error: "The form is too large." }];
-    if (topics != null) { c.market.topics = cleanTopics(topics); const ids = new Set(c.market.topics.map((t) => t.id)); c.market.picked = c.market.picked.filter((i) => ids.has(i)); }
+    if (topics != null) { c.market.topics = cleanTopics(topics); const ids = new Set(c.market.topics.map((t) => t.id)); c.market.picked = c.market.picked.filter((i) => ids.has(i)); momoMarket(c); }   // v812 - Momo ranks them and pre-ticks 4 unless she has chosen
     logIt(c, "bridge form"); if (f) formChanged(c); else recompute(c);
     await putCard(env, c); return [200, { ok: true, data: cardOut(c) }];
   }
@@ -312,6 +436,9 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
   + '.fv{border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:8px 10px;margin:6px 0}.fv label{display:block;font:600 .7rem "IBM Plex Mono",monospace;color:#8A6F3E;margin-bottom:4px;overflow-wrap:anywhere}.fv textarea{width:100%;box-sizing:border-box;border:1px solid #E3DDD1;border-radius:8px;padding:8px;font:500 .88rem "IBM Plex Sans",sans-serif;min-height:44px;background:#FFFDF9}'
   + '.fv .lw{font-size:.82rem;color:#5F6B66;white-space:pre-wrap;overflow-wrap:anywhere}.dc{display:inline-block;background:#F6EEDC;color:#8A6F3E;border-radius:99px;padding:1px 8px;font:600 .66rem "IBM Plex Mono",monospace;margin-left:6px}.empty-f{color:var(--gold);font-weight:600}'
   + '.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tp{display:grid;grid-template-columns:1fr;gap:8px}.tc{border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer}.tc.on{background:var(--gr);border-color:var(--gr);color:#fff}.tc.on small{color:#E6F2EC}.tc .bx{flex:0 0 22px;height:22px;border-radius:7px;border:1.5px solid #C9C1B2;display:flex;align-items:center;justify-content:center}.tc.on .bx{border-color:#fff}.tc b{font:500 .88rem "IBM Plex Sans",sans-serif;display:block}.tc small{display:block;font:500 .72rem "IBM Plex Mono",monospace;color:#8A6F3E;margin-top:4px}.pv{background:#F6EEDC;color:#8A6F3E;border-radius:99px;padding:0 6px;margin-left:4px}'
+  + '.mo{border:1px solid #C5A56A;border-radius:14px;background:#FBF6EA;padding:10px 12px;margin:8px 0}.mo label{display:block;font:600 .7rem "IBM Plex Mono",monospace;color:#8A6F3E;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}.mo p{margin:4px 0;font:500 .88rem "IBM Plex Sans",sans-serif}.mo .mn{color:#8A6F3E;font-size:.8rem}.tc small.why{color:#5F6B66;font-family:"IBM Plex Sans",sans-serif}.tc.on small.why{color:#E6F2EC}'
+  + '.ag{display:grid;gap:8px;margin:8px 0}.ak{border:1px solid #E3DDD1;border-radius:14px;background:#fff;padding:10px 12px}.ak.ok{background:var(--gr);border-color:var(--gr);color:#fff}.ak b{display:block;font:600 .95rem "IBM Plex Sans",sans-serif}.mt{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.chip{border-radius:99px;padding:2px 9px;font:600 .7rem "IBM Plex Mono",monospace;background:#F3EFE7;color:#5F6B66}.chip.gold{background:#F6EEDC;color:#8A6F3E;border:1px solid #C5A56A}.b3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}.b3 button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:10px;padding:8px 2px;font:600 .8rem "IBM Plex Sans",sans-serif}'
+  + '.aa{display:grid;grid-template-columns:1fr 90px 64px;gap:6px;margin:10px 0}.aa input{border:1px solid #E3DDD1;border-radius:10px;padding:8px;font:500 .88rem "IBM Plex Sans",sans-serif;min-width:0;background:#fff}'
   + '.sw{display:flex;align-items:center;justify-content:space-between;border:1px solid #E3DDD1;border-radius:12px;background:#fff;padding:10px 12px;margin:10px 0;font:500 .86rem "IBM Plex Sans",sans-serif}</style>';
 
 export function cardPage(c, key) {
@@ -339,7 +466,7 @@ function sec(id){for(var i=0;i<C.sections.length;i++)if(C.sections[i].id===id)re
 function draw(){
  var h='<h1>Huddle · '+e(nd(C.date))+'</h1><div class=hc><p class=hs id=hnext>'+e(C.status)+' · next step: '+e(C.next_step)+'</p><p class=hosts>'+e(C.hosts.join(" · "))+'</p><div class=sg>';
  var firstUndone=null;C.sections.forEach(function(s){if(!s.done&&!firstUndone)firstUndone=s.id});
- C.sections.forEach(function(s){var lab=s.id==="market"?"Market ("+C.market.picked.length+" of 4)":s.name;var st=s.done?(s.state==="same"?"same":s.state==="skip"?"skipped":"done"):(s.id===firstUndone?"Next":"");
+ C.sections.forEach(function(s){var lab=s.id==="market"?"Market ("+C.market.picked.length+" of 4)":s.name;var md=(C.momo||{})[s.id],mp=s.id==="market"?C.market.momo_pending:(md&&md.lines&&!md.accepted);var st=s.done?(s.state==="same"?"same":s.state==="skip"?"skipped":s.state==="momo"?"Momo's":"done"):mp?"Momo draft":(s.id===firstUndone?"Next":"");
   h+='<button type=button class="sc'+(s.done?" done":s.id===firstUndone?" next":"")+'" data-s="'+s.id+'" id="sec_'+s.id+'"><b>'+e(lab)+'</b><small>Slides '+s.slides.join(", ")+'</small><span class=st>'+(s.done?'${IC.ok}':'${IC.todo}')+e(st)+'</span></button>'});
  h+='</div><div class=ph id=hph>${IC.warn}'+C.placeholders.count+' placeholder'+(C.placeholders.count===1?"":"s")+' left</div>';
  if(C.drafted_by_claude.length)h+='<div class=sw><span>'+C.drafted_by_claude.length+' field'+(C.drafted_by_claude.length===1?"":"s")+' drafted by Claude</span><button type=button class="btn alt" style="width:auto;margin:0;padding:6px 12px" id=hacc>Accept all</button></div>';
@@ -363,24 +490,29 @@ function openSec(id){var s=sec(id),src=(HD.sections.filter(function(x){return x.
  var keys=s.keys.concat(Object.keys(P).filter(function(k){return ((HD.secOf||{})[k]===id)&&s.keys.indexOf(k)<0}));
  var skipped=(C.skip_slides||[]).length&&s.slides.every(function(n){return C.skip_slides.indexOf(n)>=0});
  var h='<h2>'+e(s.name)+'</h2><p class=hs>Slides '+s.slides.join(", ")+' · '+e(src)+'</p>';
+ var md=(C.momo||{})[id];if(md&&md.lines)h+='<div class=mo><label>'+(md.accepted?"Momo's draft · accepted":"Drafted by Momo")+'</label>'+md.lines.map(function(l){return '<p>'+e(l)+'</p>'}).join("")+(md.note?'<p class=mn>'+e(md.note)+'</p>':'')+(md.accepted?'':'<button type=button class=btn id=bmomo>Accept</button>')+'</div>';
  if(!keys.length)h+='<p class=hs>No fields of this section are in the form yet.</p>';
  keys.forEach(function(k){var dr=C.drafted_by_claude.indexOf(k)>=0;h+='<div class=fv><label>'+e(k)+(dr?'<span class=dc>drafted by Claude</span>':'')+'</label><div class=lw>Last week: '+show(P[k])+'</div><textarea data-k="'+e(k)+'" style="display:none">'+e(typeof C.form[k]==="string"?C.form[k]:C.form[k]==null?"":JSON.stringify(C.form[k]))+'</textarea></div>'});
  h+='<div class=two><button type=button class=btn id=bsame>Same</button><button type=button class="btn alt" id=bedit>Edit</button></div>';
  h+='<div class=sw><span>Skip slide'+(s.slides.length>1?"s":"")+' this week</span><input type=checkbox id=bskip '+(skipped?"checked":"")+'></div>';
  if(s.done)h+='<button type=button class="btn alt" id=breo>Mark not done</button>';
  $("shi").innerHTML=h;$("sh").classList.add("on");
+ if($("bmomo"))$("bmomo").onclick=function(){api({action:"accept_momo",section:id},closeSh)};
  $("bsame").onclick=function(){api({action:"same",section:id},closeSh)};
  $("bedit").onclick=function(){var tas=$("shi").querySelectorAll("textarea");if(tas.length&&tas[0].style.display==="none"){tas.forEach(function(t){t.style.display="block"});$("bedit").textContent="Save";return}var v={};tas.forEach(function(t){var k=t.getAttribute("data-k"),x=t.value,o=C.form[k];if(o!=null&&typeof o!=="string"){try{x=JSON.parse(x)}catch(er){}}v[k]=x});api({action:"edit",section:id,values:v},closeSh)};
  $("bskip").onchange=function(){api({action:"skip",section:id,on:this.checked},closeSh)};
  if($("breo"))$("breo").onclick=function(){api({action:"reopen",section:id},closeSh)};
 }
 function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
- function body(){var h='<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
+ function body(){var W=C.market.why||{},h='<h2>Market</h2><p class=hs id=mcount>Pick 4 topics · '+pick.length+' of 4</p>';
+  if(C.market.momo_pending)h+='<div class=mo><label>Momo ranked the topics and pre-ticked 4</label><p>Change any tick, or accept them as they are.</p><button type=button class=btn id=macc>Accept Momo\'s 4</button></div>';
+  if(C.market.cp_code||C.market_for_pdf.length)h+='<div class=mo><label>Also done with these 4</label>'+(C.market.cp_code?'<p>Draft market post in your Content Planner ('+e(C.market.cp_code)+'), not published</p>':'')+(C.market_for_pdf.length?'<p>Marked for the team market PDF</p>':'')+'</div>';
   if(!T.length)h+='<p class=hs>No topics yet. Your Claude adds 15 to 20 from Najma before the build.</p>';
-  h+='<div class=tp>';T.forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small></span></div>'});
+  h+='<div class=tp>';T.forEach(function(t){var on=pick.indexOf(t.id)>=0;h+='<div class="tc'+(on?" on":"")+'" data-t="'+e(t.id)+'"><span class=bx>'+(on?'${IC.ok}':'')+'</span><span><b>'+e(t.line)+'</b><small>('+e(t.table||"source")+', data as of '+e(t.as_of||"?")+')'+(t.provisional?'<span class=pv>provisional</span>':'')+'</small>'+(on&&W[t.id]?'<small class=why>Why: '+e(W[t.id])+'</small>':'')+'</span></div>'});
   h+='</div><button type=button class=btn id=msave '+(pick.length===4?"":"disabled")+'>Use these 4</button>';$("shi").innerHTML=h;
   $("shi").querySelectorAll(".tc").forEach(function(d){d.onclick=function(){var id=d.getAttribute("data-t"),i=pick.indexOf(id);if(i>=0)pick.splice(i,1);else if(pick.length<4)pick.push(id);body()}});
-  $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)}}
+  $("msave").onclick=function(){api({action:"pick",ids:pick},closeSh)};
+  if($("macc"))$("macc").onclick=function(){api({action:"accept_momo",section:"market"},closeSh)}}
  body();$("sh").classList.add("on")}
 window.hudOpen=openSec;draw();
 })();`;
@@ -394,7 +526,8 @@ export function presenterPage(c, key) {
     return { n: s.n, name: s.name, min: s.min, slides: s.slides.filter((n) => !(c.form.skip_slides || []).includes(n)), notes, done: !!c.presenter.done[s.n], note: c.presenter.notes[s.n] || "" };
   });
   const clipKey = Object.keys(c.form).find((k) => typeof c.form[k] === "string" && /^https:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//.test(c.form[k].trim()));
-  const D = { date: c.date, segs, clip: clipKey ? c.form[clipKey].trim() : "", slides: (c.build && c.build.slides) || 0, hosts: HOSTS };
+  if ((c.last_actions || []).length) segs.unshift({ n: "00", name: "Last week's actions", min: 3, slides: [], notes: [], done: false, note: "", review: true });   // v812 - last week's actions first
+  const D = { last: c.last_actions || [], actions: c.actions || [], date: c.date, segs, clip: clipKey ? c.form[clipKey].trim() : "", slides: (c.build && c.build.slides) || 0, hosts: HOSTS };
   return '<div class=tag>PRESENTER · ' + esc(niceDate(c.date).toUpperCase()) + '</div>' + CSS
     + '<style>.pz{position:relative}.pz img{width:100%;border-radius:12px;border:1px solid #E3DDD1;background:#fff;display:block;margin:6px 0}.tm{font:600 2.2rem "IBM Plex Mono",monospace;color:var(--teal);text-align:center;margin:6px 0}.tm.over{color:#B4533C}.nt{font:500 1.35rem/1.45 "IBM Plex Sans",sans-serif;color:#1C2321;white-space:pre-wrap;margin:10px 0}.sn{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px}.sn button{flex:0 0 auto;border:1px solid #E3DDD1;background:#fff;border-radius:99px;padding:6px 10px;font:600 .72rem "IBM Plex Mono",monospace;color:#5F6B66}.sn button.cur{border:1.5px solid var(--teal);color:var(--teal)}.sn button.dn{background:var(--gr);border-color:var(--gr);color:#fff}.qn{width:100%;box-sizing:border-box;border:1px solid #E3DDD1;border-radius:12px;padding:10px;font:500 .95rem "IBM Plex Sans",sans-serif;min-height:80px;background:#FFFDF9}.ld{font:500 .75rem "IBM Plex Mono",monospace;color:#8A6F3E}</style>'
     + '<div id=pr></div><script>var PD=' + jsonIn(D) + ';</script><script>' + PRES_JS + '</script>';
@@ -406,23 +539,28 @@ var q=location.search.replace(/^\?/,"").replace(/(^|&)date=[^&]*/,"");
 for(var i=1;i<=PD.slides;i++){(function(n){var im=new Image();im.onload=im.onerror=function(){loaded++;var l=$("pld");if(l)l.textContent=loaded>=PD.slides?"Deck loaded · works without signal":"Loading the deck "+loaded+" of "+PD.slides};im.src="/momo/work/huddle/file?date="+PD.date+"&kind=slide&n="+n+"&"+q;imgs[n]=im})(i)}
 var store=function(){try{return JSON.parse(localStorage.getItem("hud_q_"+PD.date)||"{}")}catch(x){return{}}},Q=store();
 function send(b){b.date=PD.date;b.action="seg";return fetch("/momo/work/huddle/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json","X-Momo-Confirm":"page"},body:JSON.stringify(b)}).then(function(r){return r.ok}).catch(function(){return false})}
+function post(b){b.date=PD.date;return fetch("/momo/work/huddle/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json","X-Momo-Confirm":"page"},body:JSON.stringify(b)}).then(function(r){return r.json()}).catch(function(){return null})}
 function flush(){Object.keys(Q).forEach(function(n){var b=Q[n];send(b).then(function(ok){if(ok){delete Q[n];localStorage.setItem("hud_q_"+PD.date,JSON.stringify(Q))}})})}
 function save(n,b){b.n=n;Q[n]=Object.assign(Q[n]||{},b);localStorage.setItem("hud_q_"+PD.date,JSON.stringify(Q));flush()}
 var fmt=function(s){var a=Math.abs(s);return(s<0?"-":"")+Math.floor(a/60)+":"+String(a%60).padStart(2,"0")};
 function draw(){var s=S[cur];if(!s){$("pr").innerHTML="<p>No segments.</p>";return}
  var h='<div class=sn>'+S.map(function(x,i){return '<button type=button data-i='+i+' class="'+(i===cur?"cur ":"")+(x.done?"dn":"")+'">'+x.n+'</button>'}).join("")+'</div>';
  h+='<h1 style="margin:2px 0 0">'+s.n+' '+e(s.name)+'</h1><p class=hosts>'+e(PD.hosts.join(" · "))+' · '+s.min+' min</p><div class=tm id=ptm>'+fmt(left)+'</div><div class=two><button type=button class=btn id=pgo>'+(tick?"Pause":"Start")+'</button><button type=button class="btn alt" id=prs>Reset</button></div>';
+ if(s.review){h+='<div class=ag>'+PD.last.map(function(a,i){return '<div class="ak'+(a.review==="done"?" ok":"")+'"><b>'+e(a.text)+'</b><div class=mt>'+(a.owner?'<span class=chip>'+e(a.owner)+'</span>':'<span class="chip gold">owner needed</span>')+(a.review?'<span class=chip>'+({done:"done",notdone:"not done",carry:"carried forward"})[a.review]+'</span>':'')+'</div><div class=b3><button type=button data-v=done data-a='+i+'>Done</button><button type=button data-v=notdone data-a='+i+'>Not done</button><button type=button data-v=carry data-a='+i+'>Carry</button></div></div>'}).join("")+'</div>'}
  h+='<div class=pz>'+s.slides.filter(function(n){return n<=PD.slides}).map(function(n){return '<img alt="Slide '+n+'" src="'+(imgs[n]?imgs[n].src:"")+'">'}).join("")+'</div>';
  h+='<div class=nt id=pnt>'+(s.notes.length?s.notes.map(e).join("\n\n"):"No speaker notes for this segment.")+'</div>';
  if(PD.clip&&s.n==="01")h+='<a class=btn id=pclip href="'+e(PD.clip)+'" target=_blank rel=noopener>${IC.play} Play clip</a>';
- h+='<textarea class=qn id=pq placeholder="Quick note: questions, shout-outs, actions">'+e(s.note)+'</textarea>';
+ if(!s.review)h+='<textarea class=qn id=pq placeholder="Quick note: questions, shout-outs, actions">'+e(s.note)+'</textarea>';
+ h+='<div class=aa><input id=paa placeholder="New action"><input id=pao placeholder="Owner"><button type=button class="btn alt" id=pab style="margin:0">Add</button></div>'+(PD.actions.length?'<p class=ld>'+PD.actions.length+' action'+(PD.actions.length===1?"":"s")+' this week</p>':'');
  h+='<button type=button class="btn'+(s.done?" alt":"")+'" id=pdone>'+(s.done?"Done · undo":"Mark segment done")+'</button><div class=two><button type=button class="btn alt" id=pprev>Back</button><button type=button class=btn id=pnext>Next</button></div><p class=ld id=pld>'+(PD.slides?(loaded>=PD.slides?"Deck loaded · works without signal":"Loading the deck"):"No slide images in this build")+'</p>';
  $("pr").innerHTML=h;
  $("pr").querySelectorAll(".sn button").forEach(function(b){b.onclick=function(){go(+b.getAttribute("data-i"))}});
  $("pgo").onclick=function(){if(tick){clearInterval(tick);tick=null}else tick=setInterval(function(){left--;var t=$("ptm");if(t){t.textContent=fmt(left);t.className="tm"+(left<0?" over":"")}},1000);$("pgo").textContent=tick?"Pause":"Start"};
  $("prs").onclick=function(){left=s.min*60;$("ptm").textContent=fmt(left);$("ptm").className="tm"};
- $("pq").onchange=function(){s.note=this.value;save(s.n,{note:this.value})};
- $("pdone").onclick=function(){s.done=!s.done;save(s.n,{done:s.done});draw()};
+ if($("pq"))$("pq").onchange=function(){s.note=this.value;save(s.n,{note:this.value})};
+ $("pdone").onclick=function(){s.done=!s.done;if(!s.review)save(s.n,{done:s.done});draw()};
+ $("pr").querySelectorAll("[data-v]").forEach(function(b){b.onclick=function(){var a=PD.last[+b.getAttribute("data-a")],v=b.getAttribute("data-v");a.review=v;post({action:"review",id:a.id,verdict:v}).then(function(j){if(j&&j.card)PD.actions=j.card.actions;draw()});draw()}});
+ $("pab").onclick=function(){var t=$("paa").value.trim();if(!t)return;post({action:"action_add",text:t,owner:$("pao").value.trim()}).then(function(j){if(j&&j.card){PD.actions=j.card.actions;draw()}})};
  $("pprev").onclick=function(){go(cur-1)};$("pnext").onclick=function(){go(cur+1)};
 }
 function go(i){if(i<0||i>=S.length)return;var q=$("pq");if(q&&q.value!==S[cur].note){S[cur].note=q.value;save(S[cur].n,{note:q.value})}if(tick){clearInterval(tick);tick=null}cur=i;left=S[cur].min*60;draw();scrollTo(0,0)}
@@ -440,7 +578,7 @@ export async function huddleRoute(request, env, url, deps) {
   }
   if (request.method !== "GET") return null;
   if (p === "/momo/work/huddle") {
-    const d = url.searchParams.get("date"), c = dOk(d) ? await getCard(env, d) : await nextCard(env);
+    const d = url.searchParams.get("date"), c = dOk(d) ? await getCard(env, d) : await nextCard(env, undefined, { cal: deps.cal });
     const prev = c && !c.stub && c.prev_date ? await getCard(env, c.prev_date) : null;
     return H(deps.page(key, rk, cardPageWithPrev(c, prev, key)));
   }

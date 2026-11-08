@@ -76,9 +76,10 @@ export function attendeeLine(att) {
 export const MINUTES_SYS = "You write FN Realty's internal MEETING MINUTES for Najjuko Ganyana (Strategic Lead; she is 'Minutes by'), from an AUTOMATIC transcript and her notes. FN Realty is a boutique real-estate advisory in Business Bay, Dubai. "
   + "Rules: (1) Never invent names, roles, figures, dates, decisions or quotes. Anything uncertain stays in the text as '[to confirm]' and is ALSO listed in open_questions. "
   + "(2) A key decision is something clearly AGREED; an idea that was only floated is written as 'proposed by <name>' in the discussion, not as a decision. "
-  + "(3) Plain, formal English that is easy for non-native speakers; third person for decisions ('FN will...'); short enough to read in five minutes. "
+  + "(3) Plain, formal English that is easy for non-native speakers; third person for decisions ('FN will...'). v812: the minutes are the FULL record, in the order discussed: every topic, who said what, every figure, decisions and next steps; long is fine. "
   + "(4) Figures or claims said in the meeting (for example team numbers) are marked 'to verify before public use'. "
   + "(5) Personal, health, pay or private matters that are not business decisions stay OUT. "
+  + "(5a) Never guess who said, asked or requested something: when the transcript does not make it clear, write 'a team member (check name)' and add it to open_questions. A person discussed by name is named, spelled as in the team glossary. "   // v812
   + "(5b) " + SPEAKER_RULE   // v663 - named speakers, owners by name, unknown speakers never guessed
   + "(6) The speech engine mishears names: " + nameFixLine() + ". Spell names as in the attendee list when they are close; a name not in the list stays as heard with '[surname / role to confirm]'. "
   + "Fill: title (the meeting topic, no 'Meeting Minutes:' prefix); purpose (one sentence); decisions (headline in a few words + one or two sentences); discussion (numbered-topic headings, each with short bullets); "
@@ -96,7 +97,7 @@ export function normMinutes(x) {
 
 export async function buildMinutes(env, deps, m, notes, transcript) {
   const att = attendeeLine(m.attendees);
-  const body = "Date: " + m.date + "\nAttendees: " + att + "\nMeeting: " + (m.title || "untitled") + " (" + Math.round((m.secs || 0) / 60) + " minutes)\n"
+  const body = (m.glossary ? "Team glossary: " + m.glossary + "\n" : "") + "Date: " + m.date + "\nAttendees: " + att + "\nMeeting: " + (m.title || "untitled") + " (" + Math.round((m.secs || 0) / 60) + " minutes)\n"
     + (notes ? "\nHer notes (already written from this recording):\nSummary: " + notes.summary + "\nDecisions: " + (notes.decisions || []).join("; ") + "\nTasks: " + (notes.actions || []).map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") + "\n" : "")
     + "\nTranscript:\n" + String(transcript || "").slice(0, 60000);
   let x = null; try { x = await deps.claudeJSON(env, MINUTES_SYS, body, MINUTES_SCHEMA, deps.model, 6000); } catch (e) { x = null; }
@@ -109,7 +110,7 @@ const pick = (keys) => ({ type: "object", additionalProperties: false, required:
 export const MINUTES_PART_A = pick(["title", "purpose", "decisions", "discussion"]);
 export const MINUTES_PART_B = pick(["actions", "open_questions"]);
 function notesBlock(notes) { return notes ? "\nHer notes (already written from this recording):\nSummary: " + notes.summary + "\nDecisions: " + (notes.decisions || []).join("; ") + "\nTasks: " + (notes.actions || []).map((a) => a.what + (a.owner ? " (" + a.owner + ")" : "") + (a.due ? " by " + a.due : "")).join("; ") + "\n" : ""; }
-function headBlock(m) { return "Date: " + m.date + "\nAttendees: " + attendeeLine(m.attendees) + "\nMeeting: " + (m.title || "untitled") + " (" + Math.round((m.secs || 0) / 60) + " minutes)\n"; }
+function headBlock(m) { return (m.glossary ? "Team glossary: " + m.glossary + "\n" : "") + "Date: " + m.date + "\nAttendees: " + attendeeLine(m.attendees) + "\nMeeting: " + (m.title || "untitled") + " (" + Math.round((m.secs || 0) / 60) + " minutes)\n"; }
 export async function buildMinutesA(env, deps, m, notes, transcript) {
   const body = headBlock(m) + notesBlock(notes) + "\nTranscript:\n" + String(transcript || "").slice(0, 60000);
   let x = null; try { x = await deps.claudeJSON(env, MINUTES_SYS + " Fill ONLY: title, purpose, decisions, discussion (the actions and open questions are written separately).", body, MINUTES_PART_A, deps.model, 3500); } catch (e) { x = null; }

@@ -7,7 +7,9 @@ import { calStart, calCallback } from "./today_cal.js";   // v786b   // v786 - t
 import { calendarRoute } from "./content_calendar.js";   // v754
 import { launchesRoute, LAUNCH_ICONS } from "./launches_card.js";   // v799 - Momo New launches
 import { makeReportRoute, publicReportRoute, tidyLaunches } from "./launch_report.js";   // v800 - the Najma Launch Report on demand, PDF and WhatsApp share
-import { huddleRoute, huddleTick, HUDDLE_ICON } from "./huddle.js";   // v810 - the Monday Huddle card (Najjuko only)
+import { huddleRoute, huddleTick, HUDDLE_ICON } from "./huddle.js";
+import { navGuard } from "./nav_guard.js";   // v812
+import { calToday as hudCal } from "./today_cal.js";   // v812 - the huddle schedule draft reads her read-only calendar   // v810 - the Monday Huddle card (Najjuko only)
 import { plannerRoute, plannerEveningCheck } from "./content_planner.js";   // v758 - FN Content Planner
 import { creamTheme } from "./cream_theme.js";   // v728
 import { plotIntelRoutes, PLOT_ROOMS } from "./plot_intel.js";   // v691 - Activity radar + Land scanner (MORE)
@@ -2365,7 +2367,7 @@ async function appFetch(request, env, ctx) {
       if (url.pathname === "/momo/work/calendar") { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }
       else { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }
     }
-    if (request.method === "POST" && url.pathname === "/momo/work/huddle/api" && personOfKey(env, url) === "najjuko") { const _hu = await huddleRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_hu) return _hu; }   // v810 - the huddle card's taps (her key only)
+    if (request.method === "POST" && url.pathname === "/momo/work/huddle/api" && personOfKey(env, url) === "najjuko") { const _hu = await huddleRoute(request, env, url, { page: momoPage, person: personOfKey, cal: hudCal }); if (_hu) return _hu; }   // v810 - the huddle card's taps (her key only)
     if (request.method === "POST" && MOMO_WORK_POSTS.has(url.pathname)) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }
     if (url.pathname === "/desk_ref_set" && request.method === "GET") {   // v549 - owner key; ?n=<ref>&approved=0|1 - takes a reference photo out of use (or back), the photo itself is kept
       if (!env.READ_KEY || url.searchParams.get("key") !== env.READ_KEY) return new Response("unauthorized", { status: 401 });
@@ -3464,7 +3466,7 @@ async function appFetch(request, env, ctx) {
         if (url.pathname === "/momo/work/calendar" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cc = await calendarRoute(request, env, url, { page: momoPage }); if (_cc) return _cc; }   // v754 - content calendar connect
         if (url.pathname === "/momo/work/launches" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _ln = await launchesRoute(request, env, url, { page: momoPage, kv: briefKvJson }); if (_ln) return _ln; }   // v799 - New launches (Kendall and Najjuko)
         if (url.pathname === "/momo/work/launches/report" && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _lr = await makeReportRoute(request, env, url, { kv: briefKvJson, person: personOfKey }); if (_lr) return _lr; }   // v800 - make a report (period, developer, zone, up to 10)
-        if (url.pathname.startsWith("/momo/work/huddle") && personOfKey(env, url) === "najjuko") { const _hu = await huddleRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_hu) return _hu; }   // v810 - Monday Huddle (private to Najjuko)
+        if (url.pathname.startsWith("/momo/work/huddle") && personOfKey(env, url) === "najjuko") { const _hu = await huddleRoute(request, env, url, { page: momoPage, person: personOfKey, cal: hudCal }); if (_hu) return _hu; }   // v810 - Monday Huddle (private to Najjuko)
         if (url.pathname.startsWith("/momo/work/planner") && ["najjuko", "kendall"].includes(personOfKey(env, url))) { const _cp = await plannerRoute(request, env, url, { page: momoPage, person: personOfKey }); if (_cp) return _cp; }   // v758 - FN Content Planner
         const _prod = url.pathname === "/momo/work/products";   // v754 (Kendall 4 Nov 2026: "merge the cards") - Product sheets: briefs, data sheets and building briefings behind one card
         if (url.pathname.startsWith("/momo/work") && !_prod) { const _wr = await workRoute(request, env, url, { isNaj: isNajjuko, isAny: (e, u) => isInsider(e, u) || keyTier(e, u) === "admin", person: personOfKey, claudeJSON, model: CLAUDE_SMART, page: momoPage, toMd, ocr: mistralOcr, ckDesk: ckDeskDeps }); if (_wr) return _wr; }
@@ -4943,7 +4945,7 @@ async function appFetch(request, env, ctx) {
 }
 
 export default {
-  async fetch(request, env, ctx) { return creamTheme(request, new URL(request.url), await this._fetch(request, env, ctx)); },   // v728 - every dark app page leaves in the cream theme (src/cream_theme.js); ?theme=dark opts out
+  async fetch(request, env, ctx) { const _u = new URL(request.url); return navGuard(request, _u, await creamTheme(request, _u, await this._fetch(request, env, ctx))); },   // v812 - every Momo screen gets Back + Home if it has no navigation   // v728 - every dark app page leaves in the cream theme (src/cream_theme.js); ?theme=dark opts out
   async _fetch(request, env, ctx) {   // v153 - question notes: their routes first, then the question button on private app pages
     const url = new URL(request.url);
     if (url.pathname === "/price_slider") return new Response(PRICE_SLIDER_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex" } });   // v661 - public, no key
@@ -4994,7 +4996,7 @@ export default {
       ctx.waitUntil((async () => {
         try { await env.MEETINGS.put("minute_tick_at", new Date().toISOString(), { expirationTtl: 86400 }); } catch (e) {}
         try { await meetingNudges(env); } catch (e) {}
-        try { if (env.WORK_EOD === "on") await huddleTick(env, event.scheduledTime || Date.now()); } catch (e) {}   // v810 - Thursday: the next Monday's huddle card, copied from last week (her instance only)
+        try { if (env.WORK_EOD === "on") await huddleTick(env, event.scheduledTime || Date.now(), { cal: hudCal }); } catch (e) {}   // v810 - Thursday: the next Monday's huddle card, copied from last week (her instance only)
         try { const _nk = String(env.INSIDER_KEY || "").split(",").map((x) => x.trim()).find((x) => x.indexOf("ins_najjuko_") === 0);   // v674 - her 6 pm task check (WORK_EOD="on" on her instance only)
           await workEveningCheck(env, { ownerWindowOpen, waSend, waSendTemplate, link: _nk ? String(env.PUBLIC_ORIGIN || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "") + "/momo?key=" + _nk : "" }, event.scheduledTime || Date.now()); } catch (e) {}
         try { await recSweep(env, { claudeJSON, model: CLAUDE_SMART }, event.scheduledTime || Date.now()); } catch (e) {}
