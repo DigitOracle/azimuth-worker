@@ -90,6 +90,9 @@ export const dOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) && !isNaN(
 export function mondayFor(today) { const w = dow(today); return w === 1 ? today : addDays(today, (8 - w) % 7); }
 export const inCreateWindow = (today) => (Date.parse(mondayFor(today)) - Date.parse(today)) / 864e5 <= 4;   // Thursday (4 days before) to Monday
 const DOWN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// v816 - the huddle week, Monday to Sunday (Dubai): "Week of Mon 9 Nov 2026"; "Next week · " when the card is for a week that has not started
+export const weekLabel = (d) => "Week of " + niceDate(d) + " " + d.slice(0, 4);
+export function weekPrefix(d, nowMs) { const t = dubaiToday(nowMs), m = mondayFor(t), thisMon = dow(t) === 1 ? t : addDays(m, -7); return d === addDays(thisMon, 7) ? "Next week · " : d > thisMon ? "Coming · " : d < thisMon ? "Past · " : ""; }
 export const niceDate = (d) => DOWN[dow(d)] + " " + Number(d.slice(8)) + " " + MON[Number(d.slice(5, 7)) - 1];
 
 // ---- placeholders: an empty field shows as a gold [placeholder] on the slide ---------------------------------------------------------------------------
@@ -183,7 +186,7 @@ async function prefill(env, c, prev, deps) {
   const cr = await campReplies(env), prevTotal = prev && prev.momo_snap ? prev.momo_snap.camp_replies : null;
   c.momo_snap = { camp_replies: cr.total };
   const rec = [];
-  if (es.length) rec.push("Last week in Momo: " + deals + " deal step" + (deals === 1 ? "" : "s") + " logged, " + views + " viewing" + (views === 1 ? "" : "s") + ", " + meets + " meeting" + (meets === 1 ? "" : "s") + ".");
+  if (es.length) rec.push(weekLabel(from) + " in Momo: " + deals + " deal step" + (deals === 1 ? "" : "s") + " logged, " + views + " viewing" + (views === 1 ? "" : "s") + ", " + meets + " meeting" + (meets === 1 ? "" : "s") + ".");
   if (cr.campaigns && prevTotal != null) rec.push((cr.total - prevTotal) + " campaign repl" + (cr.total - prevTotal === 1 ? "y" : "ies") + " this week.");
   else if (cr.campaigns) rec.push(cr.total + " campaign replies so far (weekly count starts next week).");
   const top = Object.entries(ppl).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 3).map((x) => x[0]);
@@ -220,7 +223,7 @@ async function marketOutputs(env, c) {
   if ((c.market.picked || []).length !== PICKS || c.market.momo_pending) return;
   const ts = c.market.picked.map((id) => c.market.topics.find((t) => t.id === id)).filter(Boolean);
   const b = { action: "save", kind: "feed", date: c.date, time: "10:00", format: "Carousel", series: "Market research", added: true,
-    topic: ("Market research: " + ts.map((t) => t.line).join(" | ")).slice(0, 400),
+    topic: ("Market research (" + weekLabel(c.date) + "): " + ts.map((t) => t.line).join(" | ")).slice(0, 400),
     note: ("DRAFT from the Monday Huddle " + c.date + ". Sources: " + ts.map((t) => "(" + t.table + ", data as of " + t.as_of + ")" + (t.provisional ? " provisional" : "")).join("; ") + ". Never published from here.").slice(0, 400) };
   if (c.cp_code) b.code = c.cp_code;
   try { const [s, o] = await plannerSave(env, b, "Najjuko"); if (s < 300 && o.item) c.cp_code = o.item.code; } catch (e) {}
@@ -258,7 +261,7 @@ export function nextStep(c) {
 export function cardOut(c) {
   if (c.stub) return { date: c.date, status: c.status, next_step: nextStep(c), creates_on: c.creates_on };
   const ph = placeholders(c.form);
-  return { date: c.date, status: c.status, next_step: nextStep(c), form: c.form, skip_slides: Array.isArray(c.form.skip_slides) ? c.form.skip_slides : [],
+  return { date: c.date, week_label: weekLabel(c.date), week_prefix: weekPrefix(c.date), week: { from: c.date, to: addDays(c.date, 6) }, status: c.status, next_step: nextStep(c), form: c.form, skip_slides: Array.isArray(c.form.skip_slides) ? c.form.skip_slides : [],
     sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, done: sectionDone(c, s.id), state: (c.sections[s.id] || {}).state || "", keys: keysOf(s.id, c.form) })),
     unmapped_keys: Object.keys(c.form).filter((k) => k !== "skip_slides" && !sectionOfKey(k)),
     market: { topics: c.market.topics, picked: c.market.picked, why: c.market.why || {}, momo_pending: !!c.market.momo_pending, cp_code: c.cp_code || "" }, drafted_by_claude: Object.keys(c.drafted || {}),
@@ -463,13 +466,14 @@ const CSS = '<style>:root{--gr:#2F7D5B;--ink:#1C2321;--gold:#C5A56A;--teal:#0A4F
 export function cardPage(c, key) {
   const k = encodeURIComponent(key);
   if (!c || c.stub) return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE</div><h1>Huddle</h1><div class=hc><p class=hs>' + esc(c ? nextStep(c) : "No card yet.") + "</p></div>";
-  const D = { card: cardOut(c), prev: null, key, sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS };
+  const D = { card: cardOut(c), prev: null, key, weeks: (c.weeks || []), sections: SECTIONS.map((s) => ({ id: s.id, name: s.name, slides: s.slides, source: s.source, where: WHERE[s.id] || "" })), segs: SEGMENTS, hosts: HOSTS };
   return '<a class=back href="/momo?key=' + k + '">&#8592; Momo</a><div class=tag>MONDAY HUDDLE · PRIVATE</div>' + CSS
     + '<div id=hud></div><div class=sheet id=sh><div class=in id=shi></div></div>'
     + '<script>var HD=' + jsonIn(D) + ';</script><script>' + CARD_JS + '</script>';
 }
 // the prev form travels in a separate fetch-free block so "last week's value" is visible offline
-export function cardPageWithPrev(c, prev, key) {
+export function cardPageWithPrev(c, prev, key, weeks) {
+  if (c && !c.stub && weeks) c = Object.assign({}, c, { weeks });
   const pf = prev && prev.form ? prev.form : {}, secOf = Object.fromEntries(Object.keys(pf).map((k) => [k, sectionOfKey(k)]));
   return cardPage(c, key).replace("var HD=", "var HP=" + jsonIn(pf) + ";var HSO=" + jsonIn(secOf) + ";var HD=").replace("var C=HD.card,", "HD.secOf=(typeof HSO!==\"undefined\"?HSO:{});var C=HD.card,");
 }
@@ -483,7 +487,7 @@ var show=function(v){if(v==null||v==="")return '<span class=empty-f>[placeholder
 function api(b,cb){b.date=C.date;fetch("/momo/work/huddle/api"+location.search,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(j){if(j&&j.ok){C=j.card;draw();if(cb)cb()}else if(window.momoConfirm)momoConfirm(false,"Not saved",(j&&j.error)||"Try again.")}).catch(function(){})}
 function sec(id){for(var i=0;i<C.sections.length;i++)if(C.sections[i].id===id)return C.sections[i]}
 function draw(){
- var h='<h1>Huddle · '+e(nd(C.date))+'</h1><div class=hc><p class=hs id=hnext>'+e(C.status)+' · next step: '+e(C.next_step)+'</p><p class=hosts>'+e(C.hosts.join(" · "))+'</p><div class=sg>';
+ var h='<h1 id=hwk>'+e(C.week_prefix||"")+e(C.week_label)+'</h1><div class=hc><p class=hs id=hnext>'+e(C.status)+' · next step: '+e(C.next_step)+'</p><p class=hosts>'+e(C.hosts.join(" · "))+'</p><div class=sg>';
  var firstUndone=null;C.sections.forEach(function(s){if(!s.done&&!firstUndone)firstUndone=s.id});
  C.sections.forEach(function(s){var lab=s.id==="market"?"Market ("+C.market.picked.length+" of 4)":s.name;var md=(C.momo||{})[s.id],mp=s.id==="market"?C.market.momo_pending:(md&&md.lines&&!md.accepted);var st=s.done?(s.state==="same"?"same":s.state==="skip"?"skipped":s.state==="momo"?"Momo's":"done"):mp?"Momo draft":(s.id===firstUndone?"Next":"");
   h+='<button type=button class="sc'+(s.done?" done":s.id===firstUndone?" next":"")+'" data-s="'+s.id+'" id="sec_'+s.id+'"><b>'+e(lab)+'</b><small>Slides '+s.slides.join(", ")+'</small><span class=st>'+(s.done?'${IC.ok}':'${IC.todo}')+e(st)+'</span></button>'});
@@ -495,7 +499,9 @@ function draw(){
  if(C.status==="Approved"||C.status==="Presented")h+='<a class=btn id=hpres href="/momo/work/huddle/present?date='+C.date+'&'+location.search.slice(1)+'">Presenter mode</a>';
  if(C.status==="Approved"||C.status==="Presented")h+='<button type=button class="btn alt" id=hclose>Close the huddle</button>';
  if(C.status==="Closed")h+='<p class=hs>Closed. The meeting record is in Momo Meetings; make the minutes from it there.</p>';
- h+='</div>';$("hud").innerHTML=h;
+ h+='</div>';
+ if((HD.weeks||[]).length>1)h+='<div class=hc style="margin-top:12px"><p class=hs>All huddles</p>'+HD.weeks.map(function(w){return '<a href="?'+location.search.slice(1).replace(/(^|&)date=[^&]*/,"")+'&date='+w.date+'" style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #EFE6D6;text-decoration:none;color:#0A4F4A;font-weight:600"><span>'+e(w.label)+'</span><span style="color:#8A6F3E;font-weight:500">'+e(w.status)+'</span></a>'}).join("")+'</div>';   // v816 - the week list
+ $("hud").innerHTML=h;
  document.querySelectorAll(".sc").forEach(function(b){b.onclick=function(){openSec(b.getAttribute("data-s"))}});
  if($("hacc"))$("hacc").onclick=function(){api({action:"accept"})};
  if($("hbuild"))$("hbuild").onclick=function(){var n=C.placeholders.count;if(n&&!confirm(n+" placeholder"+(n===1?" is":"s are")+" still empty and will show in gold on the slides. Build anyway?"))return;api({action:"request_build"})};
@@ -536,7 +542,7 @@ function preview(id,keys){var s=sec(id),segs=(HD.segs||[]).filter(function(g){re
  else{keys.forEach(function(k){if(/_notes$/i.test(k))return;var v=C.form[k];if(v==null||v==="")lines.push("[placeholder]");else lines.push(typeof v==="string"?v:JSON.stringify(v))});if(!lines.length&&md&&md.lines)lines=md.lines.slice()}
  if(id==="celebrations"&&md&&md.birthdays)md.birthdays.forEach(function(x){if(x.on)lines.push("Happy birthday, "+x.name+" ("+x.when+")")});
  var body=lines.slice(0,6).map(function(l){return '<li'+(l==="[placeholder]"?' class=phd':'')+'>'+e(l)+'</li>'}).join("")||'<li class=phd>[placeholder]</li>';
- var h='<p class=hs style="margin:6px 0 4px">How it will show (tap to enlarge)</p><div class=pvw><div class=pvh><span>'+e(g.n)+' '+e(g.name)+'</span><span>'+e((HD.hosts||[]).join(" · "))+'</span></div><ul>'+body+'</ul><div class=pvf>Presenter view · the slide design comes from the DNA</div></div>';
+ var h='<p class=hs style="margin:6px 0 4px">How it will show (tap to enlarge)</p><div class=pvw><div class=pvh><span>'+e(g.n)+' '+e(g.name)+'</span><span>'+e((HD.hosts||[]).join(" · "))+'</span></div><ul>'+body+'</ul><div class=pvf>'+e(C.week_label)+' · presenter view · the slide design comes from the DNA</div></div>';
  if(C.build&&C.build.slides)h+='<p class=hs style="margin:8px 0 4px">Last built slide'+(s.slides.length>1?'s':'')+'</p><div class=pvi>'+s.slides.filter(function(n){return n<=C.build.slides}).map(function(n){return '<img alt="Slide '+n+'" src="/momo/work/huddle/file?date='+C.date+'&kind=slide&n='+n+'&'+location.search.slice(1)+'">'}).join("")+'</div>';
  return h}
 function openMarket(){var T=C.market.topics,pick=C.market.picked.slice();
@@ -566,7 +572,7 @@ export function presenterPage(c, key) {
   const clipKey = Object.keys(c.form).find((k) => typeof c.form[k] === "string" && /^https:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//.test(c.form[k].trim()));
   if ((c.last_actions || []).length) segs.unshift({ n: "00", name: "Last week's actions", min: 3, slides: [], notes: [], done: false, note: "", review: true });   // v812 - last week's actions first
   const D = { last: c.last_actions || [], actions: c.actions || [], date: c.date, segs, clip: clipKey ? c.form[clipKey].trim() : "", slides: (c.build && c.build.slides) || 0, hosts: HOSTS };
-  return '<div class=tag>PRESENTER · ' + esc(niceDate(c.date).toUpperCase()) + '</div>' + CSS
+  return '<div class=tag>PRESENTER · ' + esc(weekLabel(c.date).toUpperCase()) + '</div>' + CSS
     + '<style>.pz{position:relative}.pz img{width:100%;border-radius:12px;border:1px solid #E3DDD1;background:#fff;display:block;margin:6px 0}.tm{font:600 2.2rem "IBM Plex Mono",monospace;color:var(--teal);text-align:center;margin:6px 0}.tm.over{color:#B4533C}.nt{font:500 1.35rem/1.45 "IBM Plex Sans",sans-serif;color:#1C2321;white-space:pre-wrap;margin:10px 0}.sn{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px}.sn button{flex:0 0 auto;border:1px solid #E3DDD1;background:#fff;border-radius:99px;padding:6px 10px;font:600 .72rem "IBM Plex Mono",monospace;color:#5F6B66}.sn button.cur{border:1.5px solid var(--teal);color:var(--teal)}.sn button.dn{background:var(--gr);border-color:var(--gr);color:#fff}.qn{width:100%;box-sizing:border-box;border:1px solid #E3DDD1;border-radius:12px;padding:10px;font:500 .95rem "IBM Plex Sans",sans-serif;min-height:80px;background:#FFFDF9}.ld{font:500 .75rem "IBM Plex Mono",monospace;color:#8A6F3E}</style>'
     + '<div id=pr></div><script>var PD=' + jsonIn(D) + ';</script><script>' + PRES_JS + '</script>';
 }
@@ -620,7 +626,8 @@ export async function huddleRoute(request, env, url, deps) {
   if (p === "/momo/work/huddle") {
     const d = url.searchParams.get("date"), c = dOk(d) ? await getCard(env, d) : await nextCard(env, undefined, { cal: deps.cal });
     const prev = c && !c.stub && c.prev_date ? await getCard(env, c.prev_date) : null;
-    return H(deps.page(key, rk, cardPageWithPrev(c, prev, key)));
+    const weeks = []; for (const d of (await cardIndex(env)).slice(-12).reverse()) { const x = await getCard(env, d); if (x) weeks.push({ date: d, label: weekPrefix(d) + weekLabel(d), status: x.status }); }
+    return H(deps.page(key, rk, cardPageWithPrev(c, prev, key, weeks)));
   }
   if (p === "/momo/work/huddle/present") {
     const c = await getCard(env, url.searchParams.get("date")); if (!c || !["Approved", "Presented", "Closed"].includes(c.status)) return new Response("Approve the huddle first.", { status: 409 });
