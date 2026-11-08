@@ -217,6 +217,24 @@ async function statusRow(env, wamid, patch) {
   await env.MEETINGS.put(k, JSON.stringify(r), { expirationTtl: STATUS_TTL });
 }
 
+// v818 - keep what Meta actually said: the first error's title / message / error_data.details, and the pricing
+// category (marketing = Cloud API, marketing_lite = Marketing Messages API) and billable flag. No phone number in any of it.
+export function statusExtras(s) {
+  const o = {}, e = (s && s.errors && s.errors[0]) || null, p = s && s.pricing;
+  if (e) { o.err_title = String(e.title || "").slice(0, 120); o.err_msg = String(e.message || "").slice(0, 160);
+    const det = e.error_data && e.error_data.details; if (det) o.err_details = String(det).slice(0, 240); }
+  if (p) { if (p.category) o.pcat = String(p.category); if (p.pricing_model) o.pmodel = String(p.pricing_model); if (p.billable != null) o.billable = !!p.billable; }
+  const ot = s && s.conversation && s.conversation.origin && s.conversation.origin.type; if (ot) o.origin = String(ot);
+  return o;
+}
+// v818 - owner-only read of the WABA's Marketing Messages API onboarding state (GET, no send, token never returned)
+export async function mmOnboarding(env, deps) {
+  const f = (deps && deps.fetch) || fetch, graph = (deps && deps.graph) || "https://graph.facebook.com/v21.0", waba = String(env.WABA_ID || "1588773749592854");
+  let rs = null, j = {}; try { rs = await f(graph + "/" + waba + "?fields=marketing_messages_onboarding_status", { headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN } }); j = await rs.json(); } catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 120) }; }
+  if (!rs.ok || j.error) return { ok: false, http: rs.status, error: j.error ? { code: j.error.code, message: String(j.error.message || "").slice(0, 160) } : "http " + rs.status };
+  return { ok: true, waba, marketing_messages_onboarding_status: j.marketing_messages_onboarding_status == null ? null : j.marketing_messages_onboarding_status };
+}
+
 // ---------- stats ----------
 const blankStats = () => ({ sent: 0, delivered: 0, read: 0, failed: 0, replies: 0, taps: 0, clicks: 0, uclicks: 0, optouts: 0, blocks: 0, quality: 0, err: {}, day: {}, skipped: {} });
 async function bump(env, cid, f) { const k = "camp_stats_" + cid; const s = Object.assign(blankStats(), await getJ(env, k, {})); f(s); await putJ(env, k, s); return s; }
@@ -353,7 +371,8 @@ export async function campWebhook(env, body, deps) {
       if (st === "failed" && prev !== "failed") { inc.failed = 1; m.err = codes; }
       if (st === "failed") m.st = "failed"; else if (prev !== "failed" && (st === "read" || (st === "delivered" && prev !== "read"))) m.st = st;
       if (["sent", "delivered", "read", "failed"].includes(st)) { const ts = s.timestamp ? new Date(Number(s.timestamp) * 1000).toISOString() : new Date(now).toISOString(), patch = { [st]: ts };
-        if (st === "read") patch.delivered = ts; if (st === "failed" && codes.length) patch.code = codes[0]; await statusRow(env, String(s.id), patch); }
+        if (st === "read") patch.delivered = ts; if (st === "failed" && codes.length) patch.code = codes[0];
+        Object.assign(patch, statusExtras(s)); await statusRow(env, String(s.id), patch); }
       if (!inc.delivered && !inc.read && !inc.failed) continue;
       await putJ(env, k, m);
       const S = await bump(env, m.cid, (x) => { x.delivered += inc.delivered; x.read += inc.read; x.failed += inc.failed;
@@ -742,6 +761,7 @@ export async function campaignRoute(request, env, url, deps) {
     }
     if (a === "forget") { if (!owner) return J({ ok: false, error: "owner key" }, 403); const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400);
       await optOut(env, d, "owner_forget", {}, now); return J({ ok: true, removed: await forgetContact(env, d, "owner", now) }); }
+    if (a === "mm_status") { if (!owner) return J({ ok: false, error: "owner only" }, 403); return J(await mmOnboarding(env, deps)); }   // v818
     if (a === "alerts") return J({ ok: true, alerts: await getJ(env, "camp_alerts", []), quality: { desk: await getJ(env, "camp_quality_desk", null), main: await getJ(env, "camp_quality_main", null) } });
     if (a === "optout") { const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400); return J({ ok: true, fresh: await optOut(env, d, "owner", { note: String(b.note || "").slice(0, 80) }, now) }); }
     const c = ID_RE.test(id) ? await getJ(env, "camp_" + id, null) : null; if (!c) return J({ ok: false, error: "no such campaign" }, 404);
