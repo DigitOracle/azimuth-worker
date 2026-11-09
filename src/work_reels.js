@@ -1,6 +1,6 @@
 // v700 (Kendall, 3 Nov 2026: "Go reels"): the Reels card on Momo's front door (Najjuko's and Kendall's), modelled on src/work_presentations.js.
 // One entry = one finished video. KV keys in MEETINGS:
-//   reels_index        JSON list of {slug, title, event?, date?, features?, secs?, format?, video_key, caption?}
+//   reels_index        JSON list of {slug, title, event?, date?, features?, secs?, format?, video_key, caption?, group?}
 //   vid_<video_key>    the video, through the existing PUT /video_upload + GET /video/<key> route (KV up to 24 MiB)
 //   vidposter_<key>    its poster jpg (PUT /video_upload?poster=1), served at /video/<key>?poster=1
 // Public, no key: /reel/<slug> share page (the video and its title).
@@ -26,6 +26,7 @@ export function cleanReel(x) {
   if (Number(x.secs) > 0) e.secs = Math.round(Number(x.secs));
   if (FORMATS.includes(String(x.format || ""))) e.format = String(x.format);
   if (x.caption) e.caption = String(x.caption).trim().slice(0, 3000);
+  if (x.group) { const g = one(x.group, 60); if (g) e.group = g; }   // v830 - entries sharing a group show as one card
   return e;
 }
 export async function readReels(env) {
@@ -35,6 +36,14 @@ export async function readReels(env) {
 }
 // newest first by date; on the same day the short reels before the long recordings, then by title; undated last
 export const reelsSorted = (items) => items.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || ((a.secs || 0) > 90) - ((b.secs || 0) > 90) || String(a.title).localeCompare(String(b.title)));
+// v830 (Kendall, 9 Nov 2026: one "Ask Series" card holding its videos): entries sharing a non-empty `group` form one card, above the
+// ungrouped tiles. Groups in the order their newest entry appears; inside a group by title, natural order ("02" before "10").
+const natCmp = (a, b) => String(a).localeCompare(String(b), "en", { numeric: true, sensitivity: "base" });
+export function reelsLayout(items) {
+  const groups = new Map(), loose = [];
+  for (const e of reelsSorted(items)) { if (e.group) { if (!groups.has(e.group)) groups.set(e.group, []); groups.get(e.group).push(e); } else loose.push(e); }
+  return { groups: [...groups].map(([name, list]) => ({ name, items: list.sort((a, b) => natCmp(a.title, b.title)) })), loose };
+}
 
 export async function reelPublic(request, env, url) {
   const m = url.pathname.match(/^\/reel\/([a-z0-9-]{1,60})\/?$/);
@@ -68,19 +77,28 @@ export function reelsBody(key, rk, items, origin) {
       + (e.caption ? '<button class="b o rc" type=button data-c="' + esc(e.caption) + '">Copy caption</button>' : "")
       + '<button class="b d rd" type=button data-s="' + esc(e.slug) + '" data-t="' + esc(e.title) + '">Delete</button></div></div>';
   };
-  const list = items.length ? '<div class=pl id=reels_list>' + reelsSorted(items).map(tile).join("") + '</div>'
+  // v830: the page script addresses tiles as querySelectorAll(".rt")[i], so the index is handed out in the order the tiles are WRITTEN
+  // (group cards first, then the ungrouped tiles), never from the sort position.
+  let n = 0;
+  const lay = reelsLayout(items);
+  const groupCard = (g) => '<details class=rg><summary>' + ic(REELS_ICON, 24) + '<span class=rgt><b>' + esc(g.name) + '</b> · <span class=rgc>' + g.items.length + (g.items.length === 1 ? " video" : " videos") + '</span></span>'
+    + '<span class=rgv>' + ic('<path d="M6 9l6 6 6-6"/>', 20, "#0A4F4A") + '</span></summary><div class=rgl>' + g.items.map((e) => tile(e, n++)).join("") + '</div></details>';
+  const list = items.length ? '<div class=pl id=reels_list>' + lay.groups.map(groupCard).join("") + lay.loose.map((e) => tile(e, n++)).join("") + '</div>'
     : '<div class=empty id=reels_empty>' + ic(REELS_ICON, 34) + '<p><b>Reels coming</b></p><p>Finished videos will appear here, ready to play, save and send.</p></div>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Reels</h1>' + list
     + '<style>.rt,.b,.rv,.rx{box-sizing:border-box;min-width:0;max-width:100%}.rx b,.rx i{overflow-wrap:anywhere}.pl{display:flex;flex-direction:column;gap:12px}.rt{border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}'
     + '.rv{position:relative;border-radius:10px;overflow:hidden;background:#0C1413}.rp{display:block;width:100%;max-height:340px;object-fit:contain}.rpl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;border:0;background:rgba(10,79,74,.85);display:flex;align-items:center;justify-content:center;cursor:pointer}.rvid{width:100%;max-height:70vh;background:#000}'
     + '.rx{display:flex;flex-direction:column;gap:3px}.rx b{font:600 1rem Fraunces,serif;color:#0A4F4A}.rx i{font:500 .78rem "IBM Plex Sans",sans-serif;color:#5F6B66;font-style:normal}.rx i.rf{color:#8A6F3E}.ch{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}.ch em{font:600 .62rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px;font-style:normal}'
     + '.ba{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:10px 12px;font:600 .85rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.w{background:#0A4F4A;color:#fff}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.ok{background:#0A4F4A;color:#fff;border-color:#0A4F4A}.b.d{border-color:#B4533C;color:#B4533C}'
+    + '.rg{box-sizing:border-box;min-width:0;max-width:100%;border:1px solid #E7E1D6;background:#FFFDF9;border-radius:14px}.rg>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:14px 12px;cursor:pointer;-webkit-tap-highlight-color:transparent}.rg>summary::-webkit-details-marker{display:none}'
+    + '.rgt{flex:1;min-width:0;overflow-wrap:anywhere;font:500 .8rem "IBM Plex Sans",sans-serif;color:#5F6B66}.rgt b{font:600 1.05rem Fraunces,serif;color:#0A4F4A}.rgv{display:flex;flex:none;transition:transform .15s}.rg[open] .rgv{transform:rotate(180deg)}'
+    + '.rg[open]>summary{border-bottom:1px solid #E7E1D6}.rgl{display:flex;flex-direction:column;gap:12px;padding:12px 10px}.rgl .rt{background:#fff}'
     + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px;border:1px dashed #C5A56A;border-radius:18px;text-align:center;color:#5F6B66}.empty p{margin:0}.empty b{font-family:Fraunces,serif;font-size:1.1rem;color:#0A4F4A}</style>'
     + '<script>(function(){var T=document.querySelectorAll(".rt");function play(i){var t=T[i];if(!t)return;var v=t.querySelector("video");if(!v.src)v.src=v.dataset.src;v.hidden=false;var p=t.querySelector(".rp"),b=t.querySelector(".rpl");if(p)p.remove();if(b)b.remove();var r=v.play();if(r&&r.catch)r.catch(function(){})}'
     + 'document.querySelectorAll("[data-p],.rpl").forEach(function(b){b.onclick=function(){play(+(b.dataset.p||b.dataset.i))}});'
     + 'document.querySelectorAll(".rc").forEach(function(b){b.onclick=function(){var c=b.dataset.c;function ok(){b.textContent="Copied";b.classList.add("ok");setTimeout(function(){b.textContent="Copy caption";b.classList.remove("ok")},2500)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(ok,function(){fb()})}else fb();function fb(){var a=document.createElement("textarea");a.value=c;document.body.appendChild(a);a.select();try{document.execCommand("copy");ok()}catch(e){}a.remove()}}});'
     + 'document.querySelectorAll(".rd").forEach(function(b){b.onclick=function(){if(!confirm("Delete \\u201c"+b.dataset.t+"\\u201d? It will be removed from Reels and its share link will stop working."))return;b.disabled=true;b.textContent="Deleting\\u2026";'
-    + 'fetch("/momo/work/reels/delete' + q + '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:b.dataset.s})}).then(function(r){if(!r.ok)throw 0;var t=document.getElementById("reel_"+b.dataset.s);if(t)t.remove()}).catch(function(){b.disabled=false;b.textContent="Delete";alert("Could not delete. Try again.")})}})})()</script>';
+    + 'fetch("/momo/work/reels/delete' + q + '",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:b.dataset.s})}).then(function(r){if(!r.ok)throw 0;var t=document.getElementById("reel_"+b.dataset.s);if(t){var g=t.closest("details.rg");t.remove();if(g){var n=g.querySelectorAll(".rt").length;if(n)g.querySelector(".rgc").textContent=n+(n===1?" video":" videos");else g.remove()}}}).catch(function(){b.disabled=false;b.textContent="Delete";alert("Could not delete. Try again.")})}})})()</script>';
 }
 
 export async function reelsRoute(request, env, url, deps) {
