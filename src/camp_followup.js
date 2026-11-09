@@ -63,7 +63,7 @@ export async function followupGroups(env, c, now) {
   const f = c.flow ? await getJ(env, "camp_flow_" + c.flow, null) : null;
   const ho = (await getJ(env, "camp_handover_index", [])).filter((h) => h && h.cid === c.id && h.node);   // flow handovers only (not the "follow_up" flags)
   const hoD = new Set(ho.map((h) => h.d));
-  const per = {}; let optout = 0, notDelivered = 0;
+  const per = {}; let optout = 0, notDelivered = 0; const optoutD = [], notDeliveredD = [];   // v828 - the numbers too, so a parent can de-duplicate
   for (const w of await getJ(env, "camp_msgs_" + c.id, [])) {
     const m = await getJ(env, "camp_msg_" + w, null); if (!m || !m.d) continue;
     const s = await getJ(env, "camp_status_" + w, {}) || {};
@@ -78,16 +78,16 @@ export async function followupGroups(env, c, now) {
   const groups = { started: [], opened: [], delivered: [], completed: [] }, removed = [];
   for (const d of Object.keys(per)) {
     const p = per[d];
-    if (/^h:/.test(d)) { optout++; continue; }   // a forgotten person: the number is gone, only the opt-out counts
-    if (p.optout || (await isOptedOut(env, d))) { optout++; continue; }
+    if (/^h:/.test(d)) { optout++; optoutD.push(d); continue; }   // a forgotten person: the number is gone, only the opt-out counts
+    if (p.optout || (await isOptedOut(env, d))) { optout++; optoutD.push(d); continue; }
     const st = await getJ(env, "camp_state_" + c.id + "_" + d, null), pr = flowProgress(f, st);
-    if (pr.optout) { optout++; continue; }
+    if (pr.optout) { optout++; optoutD.push(d); continue; }
     let g = "";
     if (hoD.has(d) || (pr.started && pr.terminal)) g = "completed";
     else if (pr.started || p.replied || p.tap || p.optin) g = "started";   // v821 - an opt-in owner wrote to us first: warm even before a tap
     else if (p.read) g = "opened";
     else if (p.delivered) g = "delivered";
-    else { notDelivered++; continue; }
+    else { notDelivered++; notDeliveredD.push(d); continue; }
     const k = await getJ(env, "camp_contact_" + d, null) || {}, fu = await getJ(env, fuKey(c.id, d), null) || {};
     const lastAt = String((st && st.at) || p.at || "");
     const row = { d, name: k.name || "", masked: audMask(k.e164 || d), full: "+" + DIG(k.e164 || d), group: g, answers: pr.answers,
@@ -98,7 +98,7 @@ export async function followupGroups(env, c, now) {
   }
   for (const g of Object.keys(groups)) groups[g].sort((a, b) => (a.last_at < b.last_at ? 1 : -1));
   const counts = { started: groups.started.length, opened: groups.opened.length, delivered: groups.delivered.length, completed: groups.completed.length, optout, not_delivered: notDelivered, removed: removed.length };
-  return { groups, counts, removed };
+  return { groups, counts, removed, optoutD, notDeliveredD };
 }
 
 // The line on the campaign card: warm group first ("3 started but didn't finish · follow up").
@@ -127,6 +127,7 @@ export function pathText(r) {
 const dDate = (iso) => String(iso || "").slice(0, 10);
 
 function personCard(r, cid) {
+  cid = r.cid || cid;   // v828 - on a parent page each person belongs to the run that reached them furthest
   const warm = r.group === "started" || r.group === "opened";
   return "<div class='fp " + r.group + "' data-d='" + esc(r.d) + "' data-c='" + esc(cid) + "'><div class=fph><b>" + esc(r.name || "(no name)") + "</b>"
     + (r.contacted ? "<span class='chp ok'>Contacted " + esc(dDate(r.contacted)) + "</span>" : "") + (r.follow_on ? "<span class='chp no'>Follow up " + esc(r.follow_on) + "</span>" : "") + "</div>"
@@ -139,17 +140,18 @@ function personCard(r, cid) {
     + "<button type=button class='fb mc'>" + ic(ICON.check) + "Mark contacted</button><button type=button class='fb rm'>" + ic(ICON.x) + "Remove from list</button></div>"
     + "<div class=fpd><label>" + ic(ICON.cal) + "Follow up on <input type=date class=fdt value='" + esc(r.follow_on) + "'></label><button type=button class='fb fs'>Set</button></div></div>";
 }
-export async function followupBody(env, c, key, rk, now, toastJs) {
-  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : ""), { groups, counts, removed } = await followupGroups(env, c, now);
+export async function followupBody(env, c, key, rk, now, toastJs, runs, title) {   // v828 - runs: every child run of the parent (de-duplicated per person)
+  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const { groups, counts, removed } = runs && runs.length > 1 ? await (await import("./camp_parents.js")).followupGroupsMulti(env, runs, now, followupGroups) : await followupGroups(env, c, now);
   const nav = "<div class=nav2><a class=back href='/momo/campaigns" + q + "&c=" + encodeURIComponent(c.id) + "'>&#8592; Campaign</a><a href='/momo" + q + "'>Home</a></div>";
   const tiles = GROUPS.map(([g, lab]) => "<a class='agc" + (g === "started" ? " warm" : "") + "' href='#g_" + g + "'>" + ic(GICON[g], 20) + "<b>" + counts[g] + "</b><i>" + esc(lab) + "</i></a>").join("")
     + "<div class='agc x'>" + ic(ICON.ban, 20) + "<b>" + counts.optout + "</b><i>Opted out: never contact</i></div>";
   const sec = GROUPS.map(([g, lab, sub]) => "<section class=fgs id='g_" + g + "'><h2>" + ic(GICON[g], 20) + esc(lab) + " <span>" + counts[g] + "</span></h2><p class=m>" + esc(sub) + "</p>"
     + (groups[g].length ? groups[g].map((r) => personCard(r, c.id)).join("") : "<p class='m nd'>Nobody here.</p>") + "</section>").join("");
-  return nav + "<div class=tag>CAMPAIGN · FOLLOW-UP</div><h1>Follow-up groups</h1><p class=m style='margin:0 0 4px'>" + esc(c.name || c.id) + "</p>"
+  return nav + "<div class=tag>CAMPAIGN · FOLLOW-UP</div><h1>Follow-up groups</h1><p class=m style='margin:0 0 4px'>" + esc(title || c.name || c.id) + (runs && runs.length > 1 ? " · all " + runs.length + " runs, each person once" : "") + "</p>"
     + "<p class=m>Messages here go from your own WhatsApp, not the business number. Opted-out people are counted only and never shown." + (counts.not_delivered ? " " + counts.not_delivered + " did not receive the message (not delivered), so there is nothing to follow up." : "") + "</p>"
     + FU_CSS + "<div class=ag>" + tiles + "</div>" + sec
-    + (removed.length ? "<details class=fgs><summary class=m>Removed from this list (" + removed.length + ")</summary>" + removed.map((r) => "<div class='fp x' data-d='" + esc(r.d) + "' data-c='" + esc(c.id) + "'><b>" + esc(r.name || "(no name)") + "</b><span class=m>" + esc(r.masked) + "</span><button type=button class='fb rs'>Bring back</button></div>").join("") + "</details>" : "")
+    + (removed.length ? "<details class=fgs><summary class=m>Removed from this list (" + removed.length + ")</summary>" + removed.map((r) => "<div class='fp x' data-d='" + esc(r.d) + "' data-c='" + esc(r.cid || c.id) + "'><b>" + esc(r.name || "(no name)") + "</b><span class=m>" + esc(r.masked) + "</span><button type=button class='fb rs'>Bring back</button></div>").join("") + "</details>" : "")
     + "<script>" + (toastJs || "") + "</script><script>" + FU_JS + "</script>";
 }
 const FU_CSS = "<style>.nav2{display:flex;gap:10px;margin:0 0 6px}.nav2 a{color:#0A4F4A;font-weight:600;text-decoration:none}.m{font:500 .8rem 'IBM Plex Sans',sans-serif;color:#5F6B66;margin:2px 0 8px}"

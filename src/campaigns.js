@@ -20,7 +20,8 @@
 // Never touches picjob_*, gmp_*, gcal_state.
 import { WA_TEMPLATES } from "./wa_templates.js";
 import { MOMO_TOAST_JS } from "./momo_toast.js";   // v816
-import { followupGroups, followupBody, followupAction, followupLine } from "./camp_followup.js";   // v819 - follow-up groups
+import { followupGroups, followupBody, followupAction, followupLine } from "./camp_followup.js";
+import { buildParents, pickParent, personRollup, followupGroupsMulti, runSent, runScheduled, ensureParent, parentIdOf } from "./camp_parents.js";   // v828 - parent campaigns, child runs   // v819 - follow-up groups
 
 const esc = (s) => String(s == null ? "" : s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c]));
 const DIG = (s) => String(s || "").replace(/[^0-9]/g, "");
@@ -503,6 +504,7 @@ export function cleanCampaign(x, prev) {
   if (x.owner_tz != null) c.owner_tz = !(x.owner_tz === false || x.owner_tz === "off");
   if (x.stop_forgets != null) c.stop_forgets = !!x.stop_forgets;
   if (x.phone != null) c.phone = x.phone === "main" ? "main" : "desk";
+  if (x.group != null) c.group = String(x.group).replace(/[<>"']/g, "").trim().slice(0, 60) || undefined;   // v828 - optional campaign group (default: flow + first tag)
   if (x.flow != null) c.flow = ID_RE.test(String(x.flow)) ? String(x.flow) : "";
   if (x.api != null) c.api = x.api === "mm" ? "mm" : "cloud";   // v817 - "mm" = Marketing Messages API; absent = env CAMP_MM_API
   if (x.retry_131049 != null) c.retry_131049 = !!x.retry_131049 && x.retry_131049 !== "off";
@@ -604,6 +606,9 @@ export async function campStep(env, c, deps, dry) {
   const freq = (c.freq_days != null ? c.freq_days : DEFAULTS.freqDays) * DAY;
   // v726 - owners whose own local time is outside 10:00-19:00 Mon-Fri wait in q.wait (worked first on every tick; the number alone gives the zone)
   const wait = (q.wait || []).slice(), keepWait = []; let wi = 0;
+  // v828 - people Meta held back (131049) whose retry_days have not passed yet wait in q.later [{d, due}] instead of being walked past for good.
+  // Before v828 one tick skipped all of them, reached the end of the list and marked the campaign "done" with 0 sent (pja-frond-b-10nov-r3, 8 Nov).
+  const keepLater = []; for (const L of (q.later || [])) { if (L && L.due <= now) wait.push(L.d); else if (L) keepLater.push(L); }
   while (room > 0 && (wi < wait.length || pos < q.list.length)) {
     const fromWait = wi < wait.length, d = fromWait ? wait[wi++] : q.list[pos++];
     if (!ownerOpen(c, d, now)) { skip("owner_local_hours"); if (!dry) keepWait.push(d); continue; }
@@ -616,7 +621,10 @@ export async function campStep(env, c, deps, dry) {
     if (c.vars.includes("why") && !k.why) { skip("no_reason_line"); continue; }   // the template must say why they are receiving it
     if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
     if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
-    if (k.last_mkt && now - Date.parse(k.last_mkt) < freq && !retry131049Ok(c, k, now)) { skip(c.retry_131049 && Number(k.skip_code) === 131049 ? "retry_131049_too_soon" : "messaged_this_week"); continue; }
+    if (k.last_mkt && now - Date.parse(k.last_mkt) < freq && !retry131049Ok(c, k, now)) {
+      if (c.retry_131049 && Number(k.skip_code) === 131049) { skip("retry_131049_too_soon"); const due = Date.parse(k.last_mkt) + (c.retry_days || 2) * DAY; if (!keepLater.some((x) => x.d === d)) keepLater.push({ d, due }); }
+      else skip("messaged_this_week");
+      continue; }
     let code = "", link = "";
     if (c.vars.includes("link")) { const base = String(env.PUBLIC_ORIGIN || (deps && deps.origin) || "https://azimuth-2.digitalchemy.workers.dev").replace(/\/+$/, "");
       if (dry) { code = "DRYRUN00"; } else { code = await makeLink(env, c.id, d, c.link_url); } link = base + "/c/" + code; }
@@ -654,13 +662,14 @@ export async function campStep(env, c, deps, dry) {
       if (HARD_STOP.includes(code0)) break;
     }
   }
+  if (keepLater.length) { r.later = keepLater.length; r.retry_from = new Date(Math.min(...keepLater.map((x) => x.due))).toISOString(); }
   if (dry) { r.queue = q.list.length; r.from = q.pos || 0; await putJ(env, "camp_dry_" + c.id, { at: new Date(now).toISOString(), window_open: open, room: r.room, would: r.would, skipped: r.skipped }); return r; }
-  q.pos = pos; q.wait = keepWait.concat(wait.slice(wi)); await putJ(env, "camp_q_" + c.id, q);
+  q.pos = pos; q.wait = keepWait.concat(wait.slice(wi)); q.later = keepLater; await putJ(env, "camp_q_" + c.id, q);
   await putJ(env, "camp_sent24", s24.filter((t) => now - t < DAY));
   if (sentIds.length) { const L = await getJ(env, "camp_msgs_" + c.id, []); await putJ(env, "camp_msgs_" + c.id, L.concat(sentIds)); }
-  const S2 = await bump(env, c.id, (x) => { x.sent += r.sent; x.day[today] = (x.day[today] || 0) + r.sent; if (ramp.state) x.ramp = ramp.state; for (const w of Object.keys(r.skipped)) x.skipped[w] = (x.skipped[w] || 0) + r.skipped[w]; });
+  const S2 = await bump(env, c.id, (x) => { x.sent += r.sent; x.day[today] = (x.day[today] || 0) + r.sent; if (ramp.state) x.ramp = ramp.state; x.next_eligible = keepLater.length ? r.retry_from : undefined; x.waiting = keepLater.length || undefined; for (const w of Object.keys(r.skipped)) x.skipped[w] = (x.skipped[w] || 0) + r.skipped[w]; });
   const why = await autoStop(env, c.id, S2, now); if (why) r.stop = why;
-  if (!why && pos >= q.list.length && !q.wait.length) { const cc = await getJ(env, "camp_" + c.id, null); if (cc && cc.status === "live") { cc.status = "done"; cc.done = new Date(now).toISOString(); await putJ(env, "camp_" + c.id, cc); } }
+  if (!why && pos >= q.list.length && !q.wait.length && !q.later.length) { const cc = await getJ(env, "camp_" + c.id, null); if (cc && cc.status === "live") { cc.status = "done"; cc.done = new Date(now).toISOString(); await putJ(env, "camp_" + c.id, cc); } }
   return r;
 }
 // The minute tick: every LIVE campaign, one small batch each. Nothing else runs.
@@ -724,8 +733,11 @@ export async function campaignRoute(request, env, url, deps) {
     return pg(await audienceBody(env, c, key, rk, now));
   }
   if (p === "/momo/campaigns/followup" && request.method === "GET") {   // v819 - both viewers (her own campaign contacts)
-    const c = await getJ(env, "camp_" + String(url.searchParams.get("c") || ""), null); if (!c) return new Response("not found", { status: 404 });
-    const body = await followupBody(env, c, key, rk, now, MOMO_TOAST_JS);
+    const want = String(url.searchParams.get("c") || ""), all = [];   // v828 - c = a parent id (all its runs) or one run id
+    for (const id of await getJ(env, "camp_index", [])) { const x = await getJ(env, "camp_" + id, null); if (x) all.push({ c: x, S: await getJ(env, "camp_stats_" + id, {}) }); }
+    const PP = (await buildParents(env, all)).find((P) => P.id === want || P.runs.some((r) => r.c.id === want)); if (!PP) return new Response("not found", { status: 404 });
+    const one = PP.runs.find((r) => r.c.id === want), c = one ? one.c : PP.runs[PP.runs.length - 1].c;
+    const body = await followupBody(env, c, key, rk, now, MOMO_TOAST_JS, one ? null : PP.runs.map((r) => r.c), one ? "" : PP.title);
     return new Response(deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Follow-up</title></head><body>' + body + '</body></html>', { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   if (p === "/momo/campaigns" && request.method === "GET") {
@@ -765,6 +777,7 @@ export async function campaignRoute(request, env, url, deps) {
         b = Object.assign({}, b, { template: st.template, lang: st.lang, vars: st.vars || [], header: st.header || b.header, qr: (st.buttons || []).length, freq_days: b.freq_days || f.freq_days || 14,
           phone: b.phone || f.phone || "desk", stop_forgets: b.stop_forgets != null ? b.stop_forgets : !!f.stop_forgets }); }
       const { c, err } = cleanCampaign(b, null); if (err.length) return J({ ok: false, error: err }, 400);
+      await ensureParent(env, c, now);   // v828 - same flow + first tag joins the existing parent
       await putJ(env, "camp_" + c.id, c); ix.push(c.id); await putJ(env, "camp_index", ix); return J({ ok: true, campaign: c });
     }
     if (a === "forget") { if (!owner) return J({ ok: false, error: "owner key" }, 403); const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400);
@@ -848,56 +861,88 @@ function svgClicks(rows) {
   return '<svg viewBox="0 0 340 ' + (rows.length * rh) + '" width="100%" role="img" aria-label="Clicks per link">' + rows.map(([u, v, p], i) => { const w = Math.max(2, Math.round(v / max * 230)), y0 = i * rh;
     return '<text x="0" y="' + (y0 + 11) + '" font-size="10" fill="' + MUTE + '">' + esc(u.replace(/^https:\/\//, "").slice(0, 46)) + '</text><rect x="0" y="' + (y0 + 15) + '" width="' + w + '" height="13" rx="3" fill="' + GOLD + '"/><text x="' + (w + 4) + '" y="' + (y0 + 26) + '" font-size="10" font-weight="600" fill="' + INK + '">' + v + ' clicks · ' + p + ' people</text>'; }).join("") + '</svg>';
 }
+// v828 - the PARENT card (combined, each person once) with its CHILD runs as nested cards underneath.
+const runDate = (c) => { const t = c.started || c.created || ""; const d = new Date(Date.parse(t) + 4 * 3600e3); return isNaN(d) ? "" : d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]; };
+const runLabel = (c, i, n) => { const nm = String(c.name || ""), sub = nm.indexOf("(") >= 0 ? nm.slice(nm.indexOf("(") + 1).replace(/\)\s*$/, "") : ""; return "Run " + (i + 1) + (sub ? " · " + sub : runDate(c) ? " · " + runDate(c) : ""); };
+const dubaiAt = (iso) => { const d = new Date(Date.parse(iso) + 4 * 3600e3); return isNaN(d) ? "" : d.toISOString().slice(11, 16) + " Dubai, " + d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]; };
+const waitingRun = (c, S) => c.status === "live" && !runSent(S) && !!(S && S.next_eligible);   // v828 - live, but everyone queued is "too soon": scheduled, not done
+const runStatus = (c, S) => (runScheduled(c, S) && c.status !== "live") || waitingRun(c, S) ? ["Scheduled / not sent yet", "#8A6F3E"] : (ST[c.status] || [c.status, MUTE]);
 async function dashBody(env, key, rk, now, want, owner, viewer) {
   viewer = viewer || (owner ? "kendall" : "najjuko");
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const ids = await getJ(env, "camp_index", []), camps = [];
-  for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c) camps.push(c); }
-  const cur = camps.find((c) => c.id === want) || camps[camps.length - 1] || null;
+  for (const id of ids) { const c = await getJ(env, "camp_" + id, null); if (c) camps.push({ c, S: Object.assign(blankStats(), await getJ(env, "camp_stats_" + id, {})) }); }
+  const parents = await buildParents(env, camps), P = pickParent(parents, want);
   const cix = await getJ(env, "camp_contact_index", []); let consentN = 0;
   for (const d of cix.slice(0, 1500)) { const k = await getJ(env, "camp_contact_" + d, null); if (updatesConsent(k) === true) consentN++; }
-  const S = cur ? Object.assign(blankStats(), await getJ(env, "camp_stats_" + cur.id, {})) : blankStats(), R = rates(S);
-  const head = '<div class=hg>' + [["Contacts", cix.length], ["Sent", S.sent], ["Reply rate", pc(R.replied)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
-  const unread = {}; for (const c of camps) unread[c.id] = unreadOf(await getJ(env, "camp_stats_" + c.id, {}), await getJ(env, seenKey(viewer, c.id), null));   // v806
-  const pick = camps.length > 1 ? '<div class=pk>' + camps.slice().reverse().map((c) => '<a class="pkc' + (cur && c.id === cur.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(c.id) + '"><span class=pkn>' + esc(c.name || c.id) + '</span>' + (cur && c.id === cur.id ? "" : badgeHtml(unread[c.id])) + '</a>').join("") + '</div>' : "";
-  if (!cur) return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + '<div class=empty id=camp_empty>' + ic(CAMP_ICON, 34) + '<p><b>No campaigns yet</b></p><p>Import a consented list, create a campaign, then run a dry run.</p></div>' + DASH_CSS;
-  const st = ST[cur.status] || [cur.status, MUTE];
-  const btn = (a, lab, cls) => '<button class="cb ' + (cls || "") + '" type=button data-a=' + a + ' data-id="' + esc(cur.id) + '">' + lab + '</button>';
-  const acts = [btn("dry", "Dry run")];
-  if (cur.status === "live") acts.push(btn("pause", "Pause", "pz"));
-  if (["draft", "paused"].includes(cur.status)) acts.push(owner ? btn(cur.status === "paused" ? "resume" : "live", cur.status === "paused" ? "Resume (Kendall)" : "Approve live (Kendall)", "go") : btn("request_live", cur.live_requested ? "Asked Kendall" : "Ask Kendall to go live", "go"));
-  const nu = unread[cur.id]; await markSeen(env, viewer, cur.id, S, now);   // v806 - opening the campaign clears its badge for this viewer
-  const top = '<div class=cc id="camp_' + esc(cur.id) + '"><div class=ch><b>' + esc(cur.name || cur.id) + '</b><span class=cs style="background:' + st[1] + '">' + st[0] + '</span></div>'
-    + (nu && nu.total ? '<div class=unw><i>Since you last looked</i>' + badgeHtml(nu) + '</div>' : "")
-    + '<p class=cm>' + esc(cur.template) + ' · ' + (cur.phone === "main" ? "main number" : "desk number") + ' · ' + esc(cur.window) + ' Dubai · cap ' + cur.cap + '/day · ' + esc((cur.tags || []).join(", ")) + '</p>'
-    + (cur.stopped && cur.stopped.why ? '<p class=cw>Stopped: ' + esc(cur.stopped.why) + '</p>' : "") + (cur.live_requested && cur.status !== "live" ? '<p class=cm>Go-live asked ' + esc(cur.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
-    + '<div class=cba>' + acts.join("") + '</div>' + (owner ? '<div class=cba><a class=cb id=aud_link href="/momo/campaigns/audience' + q + '&c=' + encodeURIComponent(cur.id) + '" style="text-decoration:none">Who gets this</a><a class=cb href="/momo/campaigns/contacts' + q + '" style="text-decoration:none">Contacts</a></div>' : '') + followupLine((await followupGroups(env, cur, now)).counts, "/momo/campaigns/followup" + q + "&c=" + encodeURIComponent(cur.id)) + '<p class=cr id="res_' + esc(cur.id) + '"></p></div>';   // v816   // v819 - follow-up groups, warm first
-  const funnel = svgFunnel([["Sent", S.sent], ["Delivered", S.delivered], ["Read", S.read], ["Replied", S.replies], ["Clicked", S.uclicks], ["To Najjuko", S.handovers || 0]]);
-  // branch donut: the opener's options by their titles, plus opt-outs as "Stopped"
+  const unread = {}; for (const x of camps) unread[x.c.id] = unreadOf(x.S, await getJ(env, seenKey(viewer, x.c.id), null));   // v806
+  const unreadP = (PP) => { const o = { replies: 0, clicks: 0, total: 0 }; for (const r of PP.runs) { const u = unread[r.c.id]; o.replies += u.replies; o.clicks += u.clicks; o.total += u.total; } return o; };
+  if (!P) return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1><div class=hg>' + [["Contacts", cix.length], ["Sent", 0], ["Reply rate", "0%"], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div><div class=empty id=camp_empty>' + ic(CAMP_ICON, 34) + '<p><b>No campaigns yet</b></p><p>Import a consented list, create a campaign, then run a dry run.</p></div>' + DASH_CSS;
+  const runs = P.runs, roll = await personRollup(env, runs), T = roll.tot;
+  // summed counters for what is not per person (clicks, hand-overs, branch choices, the daily chart)
+  const S = blankStats(); S.branch = {}; S.rday = {}; S.oday = {}; S.bday = {}; S.handovers = 0;
+  for (const { S: s } of runs) { for (const f of ["uclicks", "clicks", "optouts", "blocks"]) S[f] += s[f] || 0; S.handovers += s.handovers || 0;
+    for (const m of ["day", "rday", "oday", "bday", "branch"]) for (const [k, v] of Object.entries(s[m] || {})) S[m][k] = (S[m][k] || 0) + v; }
+  const head = '<div class=hg>' + [["Contacts", cix.length], ["People messaged", T.sent], ["Reply rate", pc(T.sent ? T.replied / T.sent : 0)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
+  const pick = parents.length > 1 ? '<div class=pk>' + parents.map((PP) => '<a class="pkc' + (PP.id === P.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(PP.id) + '"><span class=pkn>' + esc(PP.title) + '</span>' + (PP.id === P.id ? "" : badgeHtml(unreadP(PP))) + '</a>').join("") + '</div>' : "";
+  const nu = unreadP(P); for (const r of runs) await markSeen(env, viewer, r.c.id, r.S, now);   // v806 - opening the parent clears its runs' badges
+  const live = runs.find((r) => r.c.status === "live"), lastSent = runs.slice().reverse().find((r) => runSent(r.S)), pending = runs.filter((r) => r.c.status === "draft" || r.c.status === "paused");
+  const pst = live ? ST.live : lastSent ? (ST[lastSent.c.status] || [lastSent.c.status, MUTE]) : ["Scheduled / not sent yet", "#8A6F3E"];
+  const first = runs[0].c, fuHref = "/momo/campaigns/followup" + q + "&c=" + encodeURIComponent(P.id);
+  const fu = runs.length > 1 ? await followupGroupsMulti(env, runs.map((r) => r.c), now, followupGroups) : await followupGroups(env, first, now);
+  const btn = (a, lab, cls, c) => '<button class="cb ' + (cls || "") + '" type=button data-a=' + a + ' data-id="' + esc(c.id) + '">' + lab + '</button>';
+  const runActs = (c) => { const a = [btn("dry", "Dry run", "", c)];
+    if (c.status === "live") a.push(btn("pause", "Pause", "pz", c));
+    if (["draft", "paused"].includes(c.status)) a.push(owner ? btn(c.status === "paused" ? "resume" : "live", c.status === "paused" ? "Resume (Kendall)" : "Approve live (Kendall)", "go", c) : btn("request_live", c.live_requested ? "Asked Kendall" : "Ask Kendall to go live", "go", c));
+    return '<div class=cba>' + a.join("") + '</div><p class=cr id="res_' + esc(c.id) + '"></p>'; };
+  // v828 - each run's line comes from its per-message records (camp_msg_*), not camp_stats: on 8 Nov the counters had lost updates
+  // (run 2: counter "5 sent" against 40 message records), and the parent total must equal the sum of what the runs show.
+  const rt = {}; for (const r of runs) rt[r.c.id] = (await personRollup(env, [r])).tot;
+  const kids = runs.map((r, i) => { const c = r.c, s = r.S, t = rt[c.id], st2 = runStatus(c, s), sched = (runScheduled(c, s) && c.status !== "live") || waitingRun(c, s);
+    const line = sched ? "Scheduled / not sent yet" + (c.status === "draft" ? " · draft" : waitingRun(c, s) ? " · live, " + (s.waiting || 0) + " waiting · next eligible at " + dubaiAt(s.next_eligible) : " · nobody was due") + (c.retry_131049 ? " · retry after " + (c.retry_days || 2) + " day" + ((c.retry_days || 2) > 1 ? "s" : "") : "")
+      : t.sent + " sent · " + t.delivered + " delivered · " + t.read + " read · " + t.replied + " replied" + (t.failed ? " · " + t.failed + " held back or failed" : "") + (t.refused ? " · " + t.refused + " refused" : "");
+    return '<div class=kc id="run_' + esc(c.id) + '"><div class=ch><b>' + esc(runLabel(c, i, runs.length)) + '</b><span class=cs style="background:' + st2[1] + '">' + esc(st2[0]) + '</span></div>'
+      + '<p class=kl>' + esc(line) + '</p><p class=cm>' + esc(runDate(c)) + ' · ' + esc(c.window) + ' Dubai · cap ' + c.cap + '/day' + (c.api === "mm" ? " · marketing route" : "") + '</p>'
+      + (c.stopped && c.stopped.why ? '<p class=cw>Stopped: ' + esc(c.stopped.why) + '</p>' : "") + (c.live_requested && c.status !== "live" ? '<p class=cm>Go-live asked ' + esc(c.live_requested.at.slice(0, 16).replace("T", " ")) + ' UTC, waiting for Kendall.</p>' : "")
+      + (!waitingRun(c, s) && c.status === "live" && s.next_eligible ? '<p class=cm>' + (s.waiting || 0) + ' more waiting for their retry, next eligible at ' + esc(dubaiAt(s.next_eligible)) + '</p>' : "")
+      + ((c.status !== "done" && c.status !== "stopped") ? runActs(c) : "") + '</div>'; }).join("");
+  const top = '<div class=cc id="camp_' + esc(P.id) + '"><div class=ch><b>' + esc(P.title) + '</b><span class=cs style="background:' + pst[1] + '">' + esc(pst[0]) + '</span></div>'
+    + (nu.total ? '<div class=unw><i>Since you last looked</i>' + badgeHtml(nu) + '</div>' : "")
+    + '<p class=cm>' + esc(first.template) + ' · ' + (first.phone === "main" ? "main number" : "desk number") + ' · ' + esc((first.tags || []).join(", ")) + ' · ' + runs.length + (runs.length === 1 ? " run" : " runs") + ', each person counted once</p>'
+    + '<div class=kg><div><b>' + T.sent + '</b><i>Messaged</i></div><div><b>' + T.delivered + '</b><i>Delivered</i></div><div><b>' + T.read + '</b><i>Read</i></div><div><b>' + T.replied + '</b><i>Replied</i></div></div>'
+    + (pending.length ? '<p class=cm>' + pending.length + (pending.length === 1 ? " run is" : " runs are") + ' scheduled and not sent yet (see Runs).</p>' : "")
+    + (owner ? '<div class=cba><a class=cb id=aud_link href="/momo/campaigns/audience' + q + '&c=' + encodeURIComponent((pending[pending.length - 1] || runs[runs.length - 1]).c.id) + '" style="text-decoration:none">Who gets this</a><a class=cb href="/momo/campaigns/contacts' + q + '" style="text-decoration:none">Contacts</a></div>' : '')
+    + followupLine(fu.counts, fuHref)
+    + '<details class=kids id=camp_runs' + (pending.length ? " open" : "") + '><summary>Runs (' + runs.length + ')</summary>' + kids + '</details></div>';
+  const funnel = svgFunnel([["Messaged", T.sent], ["Delivered", T.delivered], ["Read", T.read], ["Replied", T.replied], ["Clicked", S.uclicks], ["To Najjuko", S.handovers || 0]])
+    + (T.refused ? '<p class=cm>' + T.refused + ' more were refused by Meta before sending (no message went out).</p>' : "");
   let parts = [];
-  if (cur.flow) { const f = await getJ(env, "camp_flow_" + cur.flow, null); const n0 = f && f.nodes[f.start];
-    if (n0) parts = (n0.buttons || []).filter((b) => !b.optout).map((b) => [b.title, (S.branch || {})[f.start + "." + b.id] || 0]); parts.push(["Stopped", S.optouts]); }
-  const days = lastDays(now, 14);
-  const daily = svgDaily(days, days.map((d) => S.day[d] || 0), days.map((d) => (S.rday || {})[d] || 0), cur.cap);
-  const rl = svgRate(days, days.map((d) => { const n = S.day[d] || 0; return n ? (((S.oday || {})[d] || 0) + ((S.bday || {})[d] || 0)) / n : 0; }));
-  const byUrl = {}; for (const code of (await getJ(env, "camp_links_" + cur.id, [])).slice(-2000)) { const L = await getJ(env, "camp_link_" + code, null); if (!L) continue; const u = byUrl[L.url] || (byUrl[L.url] = [L.url, 0, 0]); u[1] += L.clicks || 0; if (L.clicks) u[2]++; }
+  if (first.flow) { const f = await getJ(env, "camp_flow_" + first.flow, null); const n0 = f && f.nodes[f.start];
+    if (n0) parts = (n0.buttons || []).filter((b) => !b.optout).map((b) => [b.title, S.branch[f.start + "." + b.id] || 0]); parts.push(["Stopped", S.optouts]); }
+  const days = lastDays(now, 14), capMax = Math.max(...runs.map((r) => r.c.cap || 0), 1);
+  const daily = svgDaily(days, days.map((d) => S.day[d] || 0), days.map((d) => S.rday[d] || 0), capMax);
+  const rl = svgRate(days, days.map((d) => { const n = S.day[d] || 0; return n ? ((S.oday[d] || 0) + (S.bday[d] || 0)) / n : 0; }));
+  const byUrl = {}; for (const r of runs) for (const code of (await getJ(env, "camp_links_" + r.c.id, [])).slice(-2000)) { const L = await getJ(env, "camp_link_" + code, null); if (!L) continue; const u = byUrl[L.url] || (byUrl[L.url] = [L.url, 0, 0]); u[1] += L.clicks || 0; if (L.clicks) u[2]++; }
   const clicks = svgClicks(Object.values(byUrl).sort((a, b) => b[1] - a[1]).slice(0, 8));
-  const seen = new Set(), people = [];
-  for (const w of (await getJ(env, "camp_msgs_" + cur.id, [])).slice(-300).reverse()) { const m = await getJ(env, "camp_msg_" + w, null); if (!m || seen.has(m.d)) continue; seen.add(m.d);
-    const k = await getJ(env, "camp_contact_" + m.d, null) || {}, s2 = await getJ(env, "camp_state_" + cur.id + "_" + m.d, null), oo = await env.MEETINGS.get("camp_optout_" + m.d);
-    const status = oo ? "Opted out" : m.st === "failed" ? "Failed" : (s2 && s2.path && s2.path.length) || m.replied ? "Replied" : m.read ? "Read" : m.delivered ? "Delivered" : "Sent";
-    const br = s2 && s2.path && s2.path.length ? s2.path[s2.path.length - 1] : "-", cu = updatesConsent(k);
-    people.push('<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || m.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
-      + '<div class=pg><div><i>Number</i>' + esc(maskNum(k.e164 || m.d)) + '</div><div><i>Branch</i>' + esc(br) + '</div><div><i>Last activity</i>' + esc(String((s2 && s2.at) || m.at || "").slice(0, 16).replace("T", " ")) + '</div><div><i>Updates consent</i>' + (cu === true ? "Yes" : cu === false ? "No" : "Not asked") + '</div></div>'
-      + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(cur.id) + '" data-w="' + esc(w) + '">Follow up</button>') + '</div>'); }
+  const LAB = { replied: "Replied", read: "Read", delivered: "Delivered", sent: "Sent", failed: "Failed" }, people = [];
+  for (const p of roll.people.slice(0, 300)) { const m = p.m, s2 = p.s2;
+    const k = await getJ(env, "camp_contact_" + p.d, null) || {}, oo = await env.MEETINGS.get("camp_optout_" + p.d);
+    const status = oo ? "Opted out" : LAB[p.st];
+    const br = s2 && s2.path && s2.path.length ? s2.path[s2.path.length - 1] : "-", cu = updatesConsent(k), ri = runs.findIndex((r) => r.c.id === p.cid);
+    people.push('<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || p.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
+      + '<div class=pg><div><i>Number</i>' + esc(maskNum(k.e164 || p.d)) + '</div><div><i>Branch</i>' + esc(br) + '</div><div><i>Last activity</i>' + esc(String((s2 && s2.at) || m.at || "").slice(0, 16).replace("T", " ")) + '</div><div><i>Run</i>Run ' + (ri + 1) + '</div><div><i>Updates consent</i>' + (cu === true ? "Yes" : cu === false ? "No" : "Not asked") + '</div></div>'
+      + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(p.cid) + '" data-w="' + esc(p.w) + '">Follow up</button>') + '</div>'); }
   const card = (t, b) => '<div class=gc><h2>' + t + '</h2>' + b + '</div>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + pick + top
-    + card("Funnel", funnel) + (cur.flow ? card("Branch choices", svgDonut(parts)) : "") + card("Daily sends and replies", daily) + card("Opt-out and block rate", rl) + card("Clicks per link", clicks)
+    + card("Funnel (each person once)", funnel) + (first.flow ? card("Branch choices", svgDonut(parts)) : "") + card("Daily sends and replies", daily) + card("Opt-out and block rate", rl) + card("Clicks per link", clicks)
     + card("People (" + people.length + ")", '<input id=psearch class=srch type=search placeholder="Search name or last 4 digits">' + (people.length ? '<div class=pl>' + people.join("") + '</div>' : '<p class=nd>Nobody messaged yet.</p>'))
-    + DASH_CSS + '<script>(function(){var K=new URLSearchParams(location.search).get("key")||"";var sr=document.getElementById("psearch");if(sr)sr.oninput=function(){var v=sr.value.toLowerCase().trim();document.querySelectorAll(".pc").forEach(function(c){c.style.display=!v||c.dataset.s.indexOf(v)>=0?"":"none"})};'
+    + DASH_CSS + KIDS_CSS + DASH_JS;
+}
+const KIDS_CSS = '<style>.kg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0}.kg div{border:1px solid ' + LINE + ';border-radius:12px;padding:8px 4px;text-align:center;min-width:0}.kg b{display:block;font:600 1.15rem Fraunces,serif;color:' + TEAL + '}.kg i{font-style:normal;font-size:.64rem;color:' + MUTE + '}'
+  + '.kids{margin-top:10px;border-top:1px solid ' + LINE + ';padding-top:8px}.kids summary{font:600 .9rem "IBM Plex Sans",sans-serif;color:' + TEAL + ';cursor:pointer;padding:4px 0}.kc{border:1px solid ' + LINE + ';border-left:3px solid ' + GOLD + ';border-radius:12px;padding:10px;margin:8px 0 0;background:#fff;min-width:0}.kc .ch b{font-size:.92rem}.kl{margin:6px 0 2px;font:600 .8rem "IBM Plex Sans",sans-serif;color:' + INK + ';overflow-wrap:anywhere}.kc .cs{white-space:normal;text-align:center}</style>';
+const DASH_JS = '<script>(function(){var K=new URLSearchParams(location.search).get("key")||"";var sr=document.getElementById("psearch");if(sr)sr.oninput=function(){var v=sr.value.toLowerCase().trim();document.querySelectorAll(".pc").forEach(function(c){c.style.display=!v||c.dataset.s.indexOf(v)>=0?"":"none"})};'
     + 'document.querySelectorAll(".cb").forEach(function(b){b.onclick=function(){var a=b.dataset.a,id=b.dataset.id,o=document.getElementById("res_"+id);var body={action:a,id:id};if(a==="pause"&&!confirm("Pause this campaign?"))return;if(a==="live"){var c=prompt("Type the campaign id to approve it going live: "+id);if(c!==id)return;body.confirm=c}if(a==="followup")body.w=b.dataset.w;b.disabled=true;'
     + 'fetch("/momo/campaigns/api?key="+encodeURIComponent(K),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){b.disabled=false;if(a==="dry"){var x=j.result||{};o.textContent=j.ok?("Dry run: "+(x.would||[]).length+" would go now"+(x.window?"":" (outside the send window, live would wait)")+(x.note?" - "+x.note:"")+(x.stop?" - would stop: "+x.stop:"")+". Nothing was sent."):String(j.error)}else if(a==="followup"){b.textContent=j.ok?"Flagged for follow-up":"Not saved"}else if(j.ok)location.reload();else if(o)o.textContent=String(j.error)}).catch(function(){b.disabled=false;if(o)o.textContent="Network error"})}})})()</script>';
-}
 const DASH_CSS = '<style>.hg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}.hc{border:1px solid ' + GOLD + ';background:' + TEAL + ';color:#fff;border-radius:14px;padding:12px;min-width:0}.hc b{display:block;font:600 1.4rem Fraunces,serif}.hc i{font:500 .72rem "IBM Plex Sans",sans-serif;font-style:normal;color:#E8DCC0}'
   + '.pk{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}.pkc{border:1px solid ' + GOLD + ';border-radius:999px;padding:6px 12px;color:' + TEAL + ';text-decoration:none;font-size:.8rem;white-space:nowrap}.pkc.on{background:' + TEAL + ';color:#fff}'
   + '.cc,.gc{border:1px solid ' + LINE + ';background:#FFFDF9;border-radius:14px;padding:12px;box-sizing:border-box;min-width:0;margin-bottom:12px}.gc h2{font:600 1rem Fraunces,serif;color:' + TEAL + ';margin:0 0 8px}.ch{display:flex;justify-content:space-between;align-items:center;gap:8px}.ch b{font:600 1.05rem Fraunces,serif;color:' + TEAL + ';overflow-wrap:anywhere}.cs{color:#fff;border-radius:999px;padding:3px 10px;font:600 .68rem "IBM Plex Mono",monospace;white-space:nowrap}'
