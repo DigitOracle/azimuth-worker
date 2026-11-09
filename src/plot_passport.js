@@ -395,8 +395,8 @@ export function plotPassportHtml(key, rk, meta, deps) {
   const icTpl = Object.keys(ICONS).map((n) => '<template id="ic-' + n + '">' + ic(n) + "</template>").join("");
   const fresh = meta && meta.as_of ? "Register snapshot " + escH(meta.as_of) + " · " + Number(meta.plots || 0).toLocaleString("en-US") + " plots" + (meta.pilot ? " (pilot set)" : "") : "The plot data has not been loaded yet.";
   return '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
-    + '<title>Plot passport — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#0C1413">' + (deps.NAJ_FONTS || "")
-    + '<script>try{var t=localStorage.getItem("naj_thm")||((window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>'
+    + '<title>Plot passport — Najma</title><link rel=icon href=/naj_icon.svg><meta name=theme-color content="#F2EEE3">' + (deps.NAJ_FONTS || "")
+    + '<script>try{var t="light";/* v829: Kendall 9 Nov 2026 - Plot Passport always opens light cream */document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>'
     + "<style>" + PP_CSS + BSALES_CSS + (deps.NAJ_NAV_CSS || "") + "html[data-theme=light] .nnav{background:rgba(242,238,227,.95);border-top-color:#DDD5C2}</style></head>"
     + '<body data-key="' + escH(key) + '" data-rk="' + escH(rk || "") + '">' + icTpl
     + '<h1>Plot <em>passport</em></h1><p class=sub>One plot: flats on the market and who is selling them, prices, buildings and dates.</p>'
