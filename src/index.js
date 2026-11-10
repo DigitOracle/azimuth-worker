@@ -2476,7 +2476,9 @@ async function appFetch(request, env, ctx) {
         if (_s > _e || _s >= _total) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + _total } });
         return new Response(_vb.slice(_s, _e + 1), { status: 206, headers: Object.assign({}, _vh, { "Content-Range": "bytes " + _s + "-" + _e + "/" + _total, "Content-Length": String(_e - _s + 1) }) });
       }
-      return new Response(_vb, { headers: Object.assign({}, _vh, { "Content-Length": String(_total) }) });
+      // v831 (Kendall 10 Nov 2026: Naj could not download a reel): ?dl=1 answers with Content-Disposition: attachment so phones SAVE the file instead of opening the player; ?name= (a-z0-9_-) names it
+      const _dl = url.searchParams.get("dl") === "1" ? { "Content-Disposition": 'attachment; filename="' + ((url.searchParams.get("name") || _vk).replace(/[^a-z0-9_-]/gi, "").slice(0, 80) || "video") + '.mp4"' } : {};
+      return new Response(_vb, { headers: Object.assign({}, _vh, _dl, { "Content-Length": String(_total) }) });
     }
     // v92.1 - Drive media routes (POST/PUT) must sit outside the GET-only block
     if (url.pathname === "/gdrive/upload_start" && request.method === "POST") {   // v92 — open a resumable upload into Najma_Media/<folder>

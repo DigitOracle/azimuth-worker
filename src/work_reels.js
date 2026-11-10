@@ -72,7 +72,7 @@ export function reelsBody(key, rk, items, origin) {
       + '<video class=rvid hidden playsinline controls preload=none poster="' + esc(poster) + '" data-src="' + esc(v) + '"></video></div>'
       + '<div class=rx><b>' + esc(e.title) + '</b>' + (e.event ? '<i>' + esc(e.event) + '</i>' : "") + (e.features ? '<i class=rf>Features ' + esc(e.features) + '</i>' : "")
       + (meta.length ? '<span class=ch>' + meta.map((h) => '<em>' + esc(h) + '</em>').join("") + '</span>' : "") + '</div>'
-      + '<div class=ba><button class=b type=button data-p=' + i + '>Play</button><a class=b href="' + esc(v) + '" download="' + esc(e.slug) + '.mp4">Save</a>'
+      + '<div class=ba><button class=b type=button data-p=' + i + '>Play</button><a class=b href="' + esc(v) + '?dl=1&name=' + encodeURIComponent(e.slug) + '" download="' + esc(e.slug) + '.mp4" rel=noopener>Download</a>'
       + '<a class="b w" target=_blank rel=noopener href="https://wa.me/?text=' + encodeURIComponent(e.title + "\n" + share) + '">Send on WhatsApp</a>'
       + (e.caption ? '<button class="b o rc" type=button data-c="' + esc(e.caption) + '">Copy caption</button>' : "")
       + '<button class="b d rd" type=button data-s="' + esc(e.slug) + '" data-t="' + esc(e.title) + '">Delete</button></div></div>';
