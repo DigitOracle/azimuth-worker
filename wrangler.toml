@@ -96,6 +96,10 @@ compatibility_flags = ["nodejs_compat"]   # v105 - @cloudflare/puppeteer needs t
 services = [
   { binding = "VIDEO_SVC", service = "da-video" }
 ]
+# v836 - Momo large files (videos, decks, anything over 18 MB): R2 bucket momo-files; KV keeps a small marker per file
+r2_buckets = [
+  { binding = "MOMO_FILES", bucket_name = "momo-files" }
+]
 
 [env.azimuth2.vars]
 SHORT_LINK_BASE = "https://najma-passport.vercel.app"   # v774d (Kendall 5 Nov) - short client passport links

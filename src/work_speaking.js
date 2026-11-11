@@ -276,7 +276,7 @@ if(i.folder)d.appendChild(el("p","","Folder: "+i.folder));if(i.notes)d.appendChi
 var sb=el("div","sb"),pdf=el("a","pri","Brief (PDF)");pdf.href="/momo/work/speaking/report?id="+encodeURIComponent(i.id)+"&key="+encodeURIComponent(KEY);pdf.target="_blank";sb.appendChild(pdf);
 var ed=el("button","","Edit");ed.type="button";ed.onclick=function(e){e.stopPropagation();openForm(i)};sb.appendChild(ed);
 var ss=el("select");STS.forEach(function(v){var o=el("option","",v);o.value=v;if(v===i.status)o.selected=true;ss.appendChild(o)});ss.onclick=function(e){e.stopPropagation()};
-ss.onchange=function(){api({action:"set_status",id:i.id,status:ss.value}).then(function(r){if(r.rec){REC=r.rec;draw()}})};sb.appendChild(ss);d.appendChild(sb);c.appendChild(d);
+ss.onchange=function(){api({action:"set_status",id:i.id,status:ss.value}).then(function(r){if(r.rec){REC=r.rec;draw()}})};sb.appendChild(ss);var af=el("button","","Add files"),fi=el("input"),am=el("span","sh");af.type="button";fi.type="file";fi.multiple=true;fi.accept="image/*,video/*,.pdf,.ppt,.pptx,.key,.doc,.docx,.xls,.xlsx,.zip";fi.style.display="none";fi.onclick=function(e){e.stopPropagation()};af.onclick=function(e){e.stopPropagation();fi.click()};fi.onchange=function(){var fs=[].slice.call(fi.files||[]);fi.value="";if(fs.length)upAll(i,fs,am)};sb.appendChild(af);sb.appendChild(fi);sb.appendChild(am);d.appendChild(sb);c.appendChild(d);
 c.onclick=function(){c.classList.toggle("open")};return c}
 function dueList(i){var box=el("div","dl"),L=dueOf(i);box.appendChild(el("p","",L.length?"What is due":"Nothing due"));box.onclick=function(e){e.stopPropagation()};
 L.forEach(function(x,k){var lb=el("label"),cb=el("input");cb.type="checkbox";cb.checked=!!x.done;cb.onchange=function(){api({action:"toggle_due",id:i.id,index:k,done:cb.checked}).then(function(r){if(r.rec){REC=r.rec;draw()}})};lb.appendChild(cb);lb.appendChild(el("span","",x.what+(x.by?" (by "+x.by+")":"")));box.appendChild(lb)});
@@ -310,7 +310,7 @@ var sh=el("button","","Share");sh.type="button";sh.onclick=function(){if(navigat
 var sv=el("button","","Save to this event");sv.type="button";sv.onclick=function(){var it=Object.assign({},i);it.notes=((i.notes||"")+"\n\n"+WK[sel.value]+":\n"+ta.value).trim().slice(0,1900);api({action:"save_item",item:it}).then(function(x){if(x.rec){REC=x.rec;sv.textContent="Saved"}})};b.appendChild(sv);
 var m=open.filter(function(o){return kindOf(o.x.what)===sel.value})[0];if(m){var dn=el("button","pri","Mark done");dn.type="button";dn.onclick=function(){api({action:"toggle_due",id:i.id,index:m.k,done:true}).then(function(x){if(x.rec){REC=x.rec;draw()}})};b.appendChild(dn)}
 out.appendChild(b)})};return w}
-function copyT(t,btn){var done=function(){var o=btn.textContent;btn.textContent="Copied";setTimeout(function(){btn.textContent=o},1500)};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,function(){prompt("Copy:",t)});else prompt("Copy:",t)}
+var UP_ONE=90*1048576,UP_MAX=2*1073741824;function upQ(o){return Object.keys(o).map(function(k){return k+"="+encodeURIComponent(o[k])}).join("&")+"&key="+encodeURIComponent(KEY)}function upJ(path,q,body,json){return fetch("/momo/work/speaking/"+path+"?"+upQ(q),{method:"POST",headers:json?{"Content-Type":"application/json"}:{},body:json?JSON.stringify(body):body}).then(function(r){return r.json()}).catch(function(){return{error:"Network error."}})}function upOne(i,f,say){var type=f.type||"application/octet-stream";if(f.size>UP_MAX)return Promise.resolve({error:f.name+" is over 2 GB."});if(f.size<=UP_ONE){say(f.name+": uploading...");return upJ("upload",{id:i.id,name:f.name,type:type},f)}return upJ("mpu/create",{},{id:i.id,name:f.name,type:type,size:f.size},1).then(function(c){if(c.error)return c;var ps=c.partSize||52428800,n=Math.ceil(f.size/ps),parts=[],k=0;function next(){if(k>=n){say(f.name+": finishing...");return upJ("mpu/complete",{f:c.f,u:c.uploadId},{id:i.id,name:f.name,type:type,parts:parts},1)}k++;say(f.name+": part "+k+" of "+n);return upJ("mpu/part",{f:c.f,u:c.uploadId,n:k},f.slice((k-1)*ps,Math.min(k*ps,f.size))).then(function(r){if(r.error||!r.part){upJ("mpu/abort",{f:c.f,u:c.uploadId},null);return{error:f.name+": "+(r.error||"part failed")}}parts.push(r.part);return next()})}return next()})}function upAll(i,fs,am){var k=0,bad=[],ok=0,say=function(t){am.textContent=t};function go(){if(k>=fs.length){var t=bad.length?bad.join(" "):"Added "+ok+" file"+(ok===1?"":"s")+".";if(ok){draw();$("supd").textContent=t}else say(t);return}var f=fs[k++];upOne(i,f,say).then(function(r){if(r&&r.rec){REC=r.rec;ok++}else bad.push((r&&r.error)||(f.name+": failed."));go()})}go()}function copyT(t,btn){var done=function(){var o=btn.textContent;btn.textContent="Copied";setTimeout(function(){btn.textContent=o},1500)};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,function(){prompt("Copy:",t)});else prompt("Copy:",t)}
 $("iv_go").onclick=function(){var t=$("iv_t").value.trim(),f=$("iv_f").files&&$("iv_f").files[0],msg=$("iv_msg");msg.textContent="Reading...";
 var send=function(body){api(Object.assign({action:"parse_invite"},body)).then(function(r){if(r.error){msg.textContent=r.error;return}msg.textContent="Check the details below, then Save.";var d=r.draft;openForm(d);if(d.due&&d.due.length)$("f_notes").value=((d.notes||"")+"\nDue: "+d.due.map(function(x){return x.what+(x.by?" (by "+x.by+")":"")}).join("; ")).trim()})};
 if(t)return send({text:t});if(!f){msg.textContent="Paste the invite text or add a photo.";return}
@@ -370,14 +370,51 @@ export function storedZip(files) {   // files: [{name, data: Uint8Array}]
   const all = parts.concat(cen, [new Uint8Array(e.buffer)]), out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let p = 0; for (const b of all) { out.set(b, p); p += b.length; } return out;
 }
 async function photoZip(env, item) {
-  const files = []; for (const x of item.photos || []) { const v = await env.MEETINGS.get(SPK_FILE + "kendall_" + x.f); if (v) files.push({ name: x.f.replace(/^[a-z0-9]+_/, "") + ".jpg", data: Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) }); }
+  const files = []; for (const x of item.photos || []) { const o = env.MOMO_FILES ? await env.MOMO_FILES.get(SPK_FILE + "kendall_" + x.f) : null; if (o) { files.push({ name: x.f.replace(/^[a-z0-9]+_/, "") + ".jpg", data: new Uint8Array(await o.arrayBuffer()) }); continue; }   // v836 a large photo in R2
+    const v = await env.MEETINGS.get(SPK_FILE + "kendall_" + x.f); if (v) files.push({ name: x.f.replace(/^[a-z0-9]+_/, "") + ".jpg", data: Uint8Array.from(atob(v), (c) => c.charCodeAt(0)) }); }
   const nm = String(item.title || "photos").replace(/[^\w -]/g, "").trim().slice(0, 60).replace(/\s+/g, "_") || "photos";
   return new Response(storedZip(files), { headers: { "Content-Type": "application/zip", "Content-Disposition": 'attachment; filename="' + nm + '_photos.zip"', "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
 
+// v836 (KV caps a value at 25 MB): videos, decks and any file over PHOTO_KV_MAX live in R2 (binding MOMO_FILES, bucket momo-files) under the same key
+// speaking_file_<person>_<f>, with a small KV marker (metadata {r2:1, type, name, size}) beside it. Photos that fit stay base64 in KV as before.
+// The page sends files up to UPLOAD_ONE in one request; bigger ones go as R2 multipart parts of UPLOAD_PART (the Workers request body cap is ~100 MB).
+export const PHOTO_KV_MAX = 18 * 1024 * 1024, UPLOAD_ONE = 90 * 1024 * 1024, UPLOAD_PART = 50 * 1024 * 1024, UPLOAD_MAX = 2 * 1024 * 1024 * 1024;
+export const fileKind = (t) => (/^image\//.test(t) ? "photo" : /^video\//.test(t) ? "video" : "file");
+const cleanType = (t) => (/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(S(t, 100)) ? S(t, 100).toLowerCase() : "application/octet-stream");
+const cleanName = (n) => S(n, 120).replace(/[^\w. ()-]/g, "").trim() || "file";
+const newF = (id, name) => slug(slug(id).slice(0, 20) + "_" + Date.now().toString(36) + "_" + cleanName(name).replace(/\.[^.]*$/, "").slice(0, 24));
+async function r2Response(env, key, request, fallbackType) {
+  if (!env.MOMO_FILES) return null;
+  const hd = await env.MOMO_FILES.head(key); if (!hd) return null;
+  const n = hd.size, cm = hd.customMetadata || {}, type = (hd.httpMetadata && hd.httpMetadata.contentType) || cm.type || fallbackType || "application/octet-stream";
+  const h = { "Content-Type": type, "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400", "X-Robots-Tag": "noindex" };
+  if (!/^(image|video)\//.test(type)) h["Content-Disposition"] = 'inline; filename="' + cleanName(cm.name || key.slice(SPK_FILE.length)) + '"';
+  const rg = /^bytes=(\d*)-(\d*)$/.exec((request && request.headers.get("Range")) || "");
+  if (rg && (rg[1] || rg[2])) {
+    const a = rg[1] ? Number(rg[1]) : Math.max(0, n - Number(rg[2])), b = rg[1] && rg[2] ? Math.min(Number(rg[2]), n - 1) : n - 1;
+    if (a >= n || a > b) return new Response(null, { status: 416, headers: { "Content-Range": "bytes */" + n } });
+    const o = await env.MOMO_FILES.get(key, { range: { offset: a, length: b - a + 1 } }); if (!o) return new Response("not found", { status: 404 });
+    return new Response(o.body, { status: 206, headers: Object.assign(h, { "Content-Range": "bytes " + a + "-" + b + "/" + n, "Content-Length": String(b - a + 1) }) });
+  }
+  const o = await env.MOMO_FILES.get(key); if (!o) return new Response("not found", { status: 404 });
+  return new Response(o.body, { headers: Object.assign(h, { "Content-Length": String(n) }) });
+}
+async function attachFile(env, person, id, f, kind, name, origin) {   // the file joins its event: photos, videos, or a material link the card already knows how to open
+  const rec = (await readSpk(env, person)) || emptySpk(), it = rec.items.find((i) => i.id === slug(id)); if (!it) return null;
+  if (kind === "photo") it.photos = (it.photos || []).concat([{ f, cap: "" }]).slice(0, 200);
+  else if (kind === "video") it.videos = (it.videos || []).concat([{ f, cap: S(name, 160) }]).slice(0, 100);
+  else it.materials = (it.materials || []).concat([{ label: S(name, 120), url: origin + "/momo/work/speaking/file?f=" + encodeURIComponent(f) }]).slice(0, 20);
+  it.updatedAt = new Date().toISOString(); return writeSpk(env, person, rec, "File added to " + it.title + ": " + S(name, 80));
+}
+const marker = (env, key, type, name, size) => env.MEETINGS.put(key, "", { metadata: { r2: 1, type, name, size } });
+const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+
 // v808: a stored file as a response; raw-byte values (videos) honour Range so a phone can play and seek
+// v836: R2 first (large files), then KV exactly as before
 export async function fileResponse(env, kvKey, request, fallbackType) {
+  const rr = await r2Response(env, kvKey, request, fallbackType); if (rr) return rr;
   const r = await env.MEETINGS.getWithMetadata(kvKey, "arrayBuffer"); if (!r || !r.value) return new Response("not found", { status: 404 });
   const m = r.metadata || {};
   const txt = (v) => typeof v === "string" ? v : new TextDecoder().decode(v);
@@ -422,6 +459,7 @@ export async function speakingRoute(request, env, url, deps) {
   if (p === "/momo/work/speaking/rec" && request.method === "GET") return J({ rec: (await readSpk(env, person)) || emptySpk() });
   if (p === "/momo/work/speaking/file" && request.method === "GET") {   // v660 - a file for an engagement (PDF or picture), loaded to KV outside git; Kendall's key only
     const f = slug(url.searchParams.get("f") || "");
+    if (f) { const rr = await r2Response(env, SPK_FILE + person + "_" + f, request, "application/pdf"); if (rr) return rr; }   // v836 R2 first
     if (f) { const mm = await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f, "stream"); if (mm && mm.metadata && mm.metadata.raw) { try { await mm.value.cancel(); } catch (x) {} return fileResponse(env, SPK_FILE + person + "_" + f, request); } }
     const r = f ? await env.MEETINGS.getWithMetadata(SPK_FILE + person + "_" + f) : null;
     if (!r || !r.value) return new Response("not found", { status: 404 });
@@ -430,6 +468,53 @@ export async function speakingRoute(request, env, url, deps) {
   }
   if (p === "/momo/work/speaking/zip" && request.method === "GET") { const it = ((await readSpk(env, person)) || emptySpk()).items.find((i) => i.id === slug(url.searchParams.get("id") || "")); return it && (it.photos || []).length ? photoZip(env, it) : new Response("not found", { status: 404 }); }   // v798
   if (p === "/momo/work/speaking/report" && request.method === "GET") return new Response(spkReport((await readSpk(env, person)) || emptySpk(), url.searchParams.get("id") || ""), { headers: H });
+  // v836 - Add files to an event (Kendall's key only, like every route below the gate). One request up to UPLOAD_ONE; R2 multipart above it.
+  if (p.startsWith("/momo/work/speaking/upload") || p.startsWith("/momo/work/speaking/mpu/")) {
+    if (request.method !== "POST") return new Response("not found", { status: 404 });
+    const sp = url.searchParams, origin = url.origin;
+    const has = async (id) => !!((await readSpk(env, person)) || emptySpk()).items.find((i) => i.id === slug(id));
+    if (p === "/momo/work/speaking/upload") {
+      const id = sp.get("id") || "", type = cleanType(sp.get("type")), name = cleanName(sp.get("name")), kind = fileKind(type), len = Number(request.headers.get("Content-Length") || 0);
+      if (!(await has(id))) return J({ error: "Event not found." }, 404);
+      if (!len) return J({ error: "Empty file." }, 400);
+      if (len > UPLOAD_ONE) return J({ error: "Too big for one request; the page sends it in parts." }, 413);
+      const f = newF(id, name), key = SPK_FILE + person + "_" + f;
+      if (kind === "photo" && len <= PHOTO_KV_MAX) { const u8 = new Uint8Array(await request.arrayBuffer()); await env.MEETINGS.put(key, b64(u8), { metadata: { type, name } }); }
+      else {
+        if (!env.MOMO_FILES) return J({ error: "File store is not connected." }, 503);
+        await env.MOMO_FILES.put(key, request.body, { httpMetadata: { contentType: type }, customMetadata: { name, type } }); await marker(env, key, type, name, len);
+      }
+      const rec = await attachFile(env, person, id, f, kind, name, origin); return J({ ok: true, f, kind, rec });
+    }
+    if (!env.MOMO_FILES) return J({ error: "File store is not connected." }, 503);
+    if (p === "/momo/work/speaking/mpu/create") {
+      let b = {}; try { b = (await request.json()) || {}; } catch (e) { return J({ error: "Send JSON." }, 400); }
+      const type = cleanType(b.type), name = cleanName(b.name), size = Number(b.size) || 0;
+      if (!(await has(b.id))) return J({ error: "Event not found." }, 404);
+      if (size > UPLOAD_MAX) return J({ error: "Files up to 2 GB." }, 413);
+      const f = newF(b.id, name), up = await env.MOMO_FILES.createMultipartUpload(SPK_FILE + person + "_" + f, { httpMetadata: { contentType: type }, customMetadata: { name, type } });
+      return J({ ok: true, f, uploadId: up.uploadId, partSize: UPLOAD_PART });
+    }
+    const f = slug(sp.get("f") || ""), u = sp.get("u") || "", key = SPK_FILE + person + "_" + f;
+    if (!f || !u) return J({ error: "Missing upload." }, 400);
+    const up = env.MOMO_FILES.resumeMultipartUpload(key, u);
+    if (p === "/momo/work/speaking/mpu/part") {
+      const n = Math.round(Number(sp.get("n"))); if (!(n >= 1 && n <= 10000)) return J({ error: "Bad part number." }, 400);
+      if (Number(request.headers.get("Content-Length") || 0) > UPLOAD_ONE) return J({ error: "Part too big." }, 413);
+      try { const pt = await up.uploadPart(n, request.body); return J({ ok: true, part: { partNumber: pt.partNumber, etag: pt.etag } }); } catch (e) { return J({ error: "Part failed: " + String(e && e.message || e).slice(0, 120) }, 500); }
+    }
+    if (p === "/momo/work/speaking/mpu/abort") { try { await up.abort(); } catch (e) {} return J({ ok: true }); }
+    if (p === "/momo/work/speaking/mpu/complete") {
+      let b = {}; try { b = (await request.json()) || {}; } catch (e) { return J({ error: "Send JSON." }, 400); }
+      const parts = (Array.isArray(b.parts) ? b.parts : []).map((x) => ({ partNumber: Math.round(Number(x && x.partNumber)), etag: S(x && x.etag, 200) })).filter((x) => x.partNumber >= 1 && x.etag);
+      if (!parts.length) return J({ error: "No parts." }, 400);
+      if (!(await has(b.id))) return J({ error: "Event not found." }, 404);
+      let o; try { o = await up.complete(parts); } catch (e) { return J({ error: "Could not finish the upload: " + String(e && e.message || e).slice(0, 120) }, 500); }
+      const type = cleanType(b.type), name = cleanName(b.name), kind = fileKind(type);
+      await marker(env, key, type, name, o.size); const rec = await attachFile(env, person, b.id, f, kind, name, origin); return J({ ok: true, f, kind, rec });
+    }
+    return new Response("not found", { status: 404 });
+  }
   if (p === "/momo/work/speaking/api" && request.method === "POST") {
     let b = {}; try { b = await request.json(); } catch (e) { return J({ error: "Send JSON." }, 400); }
     b = b || {};
