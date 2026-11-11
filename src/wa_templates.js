@@ -76,6 +76,26 @@ export const WA_TEMPLATES = {
     example: ["Vishant", "FD-12 DAMAC Lagoons reel (Edit)", "Thu 6 Nov 18:00"],
     buttons: [{ type: "QUICK_REPLY", text: "Done" }, { type: "QUICK_REPLY", text: "In progress" }, { type: "QUICK_REPLY", text: "Stuck" }],
   },
+  // v833 (Kendall 11 Nov 2026: "approved, submit all three to Meta") - the FN Realty owner outreach set, Najjuko's own voice. MARKETING.
+  // The image header sample is Naj's photo, KV tplhdr_naj_pja_intro (also served at /img/tplhdr_naj_pja_intro), uploaded at submit.
+  najjuko_owner_general_v1: {
+    name: "najjuko_owner_general_v1", language: "en", category: "MARKETING", header_image_key: "tplhdr_naj_pja_intro",
+    body: "Hello {{1}}, Najjuko here, FN Realty (BRN 98949).\n\nA quick question regarding your property in {{2}}: are you currently exploring selling or leasing opportunities, or would you prefer to stay informed about the market?\n\nHappy to assist either way.\n\nYou're receiving this because {{3}}. Tap Stop and I'll delete your details.",
+    example: ["Ahmed", "Business Bay", "you're on the DLD Green List as open to broker contact"],
+    buttons: [{ type: "QUICK_REPLY", text: "Exploring selling" }, { type: "QUICK_REPLY", text: "Exploring leasing" }, { type: "QUICK_REPLY", text: "Keep me informed" }, { type: "QUICK_REPLY", text: "Stop messages" }],
+  },
+  najjuko_owner_followup_v1: {
+    name: "najjuko_owner_followup_v1", language: "en", category: "MARKETING",
+    body: "Hi {{1}}, just checking in. If you ever consider selling or leasing your property in {{2}}, I'm happy to help.\n\nNajjuko · FN Realty · BRN 98949. Tap Stop and I'll delete your details.",
+    example: ["Ahmed", "Business Bay"],
+    buttons: [{ type: "QUICK_REPLY", text: "Exploring selling" }, { type: "QUICK_REPLY", text: "Exploring leasing" }, { type: "QUICK_REPLY", text: "Stop messages" }],
+  },
+  najjuko_market_update_v1: {
+    name: "najjuko_market_update_v1", language: "en", category: "MARKETING",
+    body: "Hi {{1}}, your monthly market note for {{2}}: {{3}}\n\nIf anything changes with your property, just reply here and I'll help.\n\nNajjuko · FN Realty · BRN 98949. Tap Stop and I'll delete your details.",
+    example: ["Ahmed", "Business Bay", "average 1-bed rents rose 3% this quarter and 4 new buildings handed over nearby"],
+    buttons: [{ type: "QUICK_REPLY", text: "Exploring selling" }, { type: "QUICK_REPLY", text: "Exploring leasing" }, { type: "QUICK_REPLY", text: "Stop messages" }],
+  },
   digitalchemy_event_countdown: {
     name: "digitalchemy_event_countdown", language: "en", category: "MARKETING",
     body: "Hi {{1}}, {{2}} starts in {{3}} days. The DigitAlchemy team will be there. Would you like to meet?",
@@ -166,11 +186,19 @@ export async function templateRoutes(request, env, url, deps) {
       if (up.error) return J({ ok: false, error: up.error }, 502);
       payload = buildCreatePayload(name, up.handle);
     }
+    if (tdef.header_image_key) {   // v833 - the route uploads an IMAGE header sample too (until now only the minute-tick path did)
+      const bytes = (await env.MEETINGS.get(tdef.header_image_key, "arrayBuffer")) || (await env.MEETINGS.get("img_" + tdef.header_image_key, "arrayBuffer"));
+      if (!bytes) return J({ ok: false, error: "the header image " + tdef.header_image_key + " is not stored" }, 400);
+      const b = new Uint8Array(bytes), png = b[0] === 0x89 && b[1] === 0x50;
+      const up = await uploadHeaderSample(env, graph, bytes, tdef.header_image_key + (png ? ".png" : ".jpg"), deps, png ? "image/png" : "image/jpeg");
+      if (up.error) return J({ ok: false, error: up.error }, 502);
+      payload = buildCreatePayload(name, up.handle);
+    }
     try {
       const r = await fetch(`${graph}/${encodeURIComponent(waba)}/message_templates`, {
         method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await r.json().catch(() => ({}));
-      return J({ ok: r.ok, http: r.status, id: j.id || null, status: j.status || null, error: r.ok ? null : String((j.error && j.error.message) || "Meta error").slice(0, 300) }, r.ok ? 200 : 502);
+      return J({ ok: r.ok, http: r.status, id: j.id || null, status: j.status || null, category: j.category || null, error: r.ok ? null : String((j.error && j.error.message) || "Meta error").slice(0, 300) }, r.ok ? 200 : 502);
     } catch (e) { return J({ ok: false, error: "unreachable" }, 502); }
   }
 
