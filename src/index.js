@@ -24,6 +24,7 @@ import { SHEETS_ICON, sheetsPublic } from "./work_sheets.js";   // v672 - Produc
 import { BROKERS_ICON } from "./work_brokers.js";   // v682 - the Brokers card on Najjuko's front door
 import { PRES_ICON, presPublic } from "./work_presentations.js";
 import { REELS_ICON, reelPublic } from "./work_reels.js";   // v700 - the Reels card and its public /reel/ pages
+import { ingestNotes as mktIngestNotes } from "./market_note.js";   // v834
 import { CAMP_ICON, campaignRoute, campWebhook, campTick, optOut as campOptOut, isOptedOut as campIsOptedOut } from "./campaigns.js"; import { dpRoute } from "./district_passport.js";   // v771   // v723 - the WhatsApp campaign engine (Najjuko's card; sends only when Kendall sets a campaign live)
 import { docRoute } from "./district_doc.js"; import { dpOpened } from "./campaigns.js";   // v774 - the personal passport page
 import { BPP_ICON, bppPublic, bppTick } from "./building_passports.js";   // v697 - the Building Passports card, its public /bp/ pages and the minute-tick job   // v684 - the Presentations card and its public /pres/ pages
@@ -3875,6 +3876,10 @@ async function appFetch(request, env, ctx) {
           if (_mb.projectIndex.length < 100 || _mb.projectIndex.length > 50000) return new Response("index size implausible", { status: 400 });
           await env.MEETINGS.put("mkt_index", JSON.stringify(_mb.projectIndex));
           return new Response(JSON.stringify({ ok: true, indexed: _mb.projectIndex.length }), { headers: { "Content-Type": "application/json" } });
+        }
+        if (_mb && Array.isArray(_mb.mktNotes)) {                                  // v834 - monthly market note drafts (build_market_notes.py); never overwrites a decision
+          const _mr = await mktIngestNotes(env, _mb, Date.now());
+          return new Response(JSON.stringify(_mr), { status: _mr.ok ? 200 : 400, headers: { "Content-Type": "application/json" } });
         }
         if (_mb && _mb.image && _mb.imageName) {                                  // v45 — rendered heat-map (or other) PNG from the collector
           const nm = String(_mb.imageName).replace(/[^a-z0-9_]/gi, "").slice(0, 64);   // v287 - was 40: ejari_filed_recent_dubaiinvestmentparkfirst (43) was stored truncated and read back 404

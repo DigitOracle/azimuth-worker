@@ -20,6 +20,7 @@
 // Never touches picjob_*, gmp_*, gcal_state.
 import { WA_TEMPLATES } from "./wa_templates.js";
 import { MOMO_TOAST_JS } from "./momo_toast.js";   // v816
+import { notesRoute, mnLinkCard } from "./market_note.js";   // v834 - monthly market notes
 import { followupGroups, followupBody, followupAction, followupLine } from "./camp_followup.js";
 import { buildParents, pickParent, personRollup, followupGroupsMulti, runSent, runScheduled, ensureParent, parentIdOf } from "./camp_parents.js";   // v828 - parent campaigns, child runs   // v819 - follow-up groups
 
@@ -512,6 +513,8 @@ export function cleanCampaign(x, prev) {
   if (x.freq_days != null) c.freq_days =Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
   if (x.qr != null) c.qr = Math.max(0, Math.min(10, parseInt(x.qr, 10) || 0));
   if (x.link_url != null) c.link_url = cleanTarget(x.link_url);
+  if (x.require_consent != null) c.require_consent = /^[a-z0-9_-]{2,40}$/.test(String(x.require_consent)) ? String(x.require_consent) : undefined;   // v834 - market note: only owners who said yes to this topic (or tag nurture)
+  if (x.mkt_month != null) c.mkt_month = /^\d{6}$/.test(String(x.mkt_month)) ? String(x.mkt_month) : undefined;   // v834 - market note month: one note per owner per calendar month
   if (x.header != null) c.header = x.header && /^(image|video|document)$/.test(x.header.type) && (cleanTarget(x.header.link) || /^\d{5,30}$/.test(String(x.header.id || ""))) ? { type: x.header.type, link: cleanTarget(x.header.link) || undefined, id: x.header.id ? String(x.header.id) : undefined } : null;
   if (x.thresholds != null && typeof x.thresholds === "object") { c.thresholds = {}; for (const k of ["block", "optout", "quality", "failed", "min"]) if (Number(x.thresholds[k]) >= 0) c.thresholds[k] = Number(x.thresholds[k]); }
   c.cap = c.cap || DEFAULTS.cap; c.batch = c.batch || DEFAULTS.batch; c.window = c.window || DEFAULTS.window; c.days = c.days || DEFAULTS.days; c.phone = c.phone || "desk"; c.vars = c.vars || []; c.tags = c.tags || [];
@@ -550,9 +553,12 @@ export function mmNotReady(e) { if (!e) return false; const code = Number(e.code
   return code === 10 || code === 200 || /onboard|terms of service|not (yet )?(eligible|enabled|supported)|marketing[_ ]messages|unsupported post request|nonexisting field|unknown path/i.test(msg); }
 // v817 - retry a person Meta held back for its per-user marketing limit (131049), once at least retry_days (default 2) have passed
 export function retry131049Ok(c, k, now) { return !!(c.retry_131049 && k && Number(k.skip_code) === 131049 && k.last_mkt && now - Date.parse(k.last_mkt) >= (c.retry_days || 2) * DAY); }
+// v834 - "Keep me informed": the flow records consent (topic market-updates; the brief spells it market_updates), older imports may carry tag nurture.
+export function hasConsent(k, topic) { if (!topic) return true; const cs = (k && k.consents) || {}, t2 = topic.replace(/_/g, "-"), t3 = topic.replace(/-/g, "_");
+  const v = cs[topic] || cs[t2] || cs[t3]; if (v && typeof v === "object" ? v.value === true : v === true) return true; return (k.tags || []).includes("nurture"); }
 async function buildQueue(env, c) {
   const ix = await getJ(env, "camp_contact_index", []), list = [];
-  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && !k.removed && (k.tags || []).some((t) => c.tags.includes(t))) list.push(d); }   // v816 - removed contacts skipped
+  for (const d of ix) { const k = await getJ(env, "camp_contact_" + d, null); if (k && !k.opted_out && !k.undeliverable && !k.removed && (k.tags || []).some((t) => c.tags.includes(t)) && hasConsent(k, c.require_consent)) list.push(d); }   // v816 - removed contacts skipped; v834 - require_consent
   return { list, pos: 0, built: new Date().toISOString() };
 }
 
@@ -621,6 +627,8 @@ export async function campStep(env, c, deps, dry) {
     if (c.vars.includes("why") && !k.why) { skip("no_reason_line"); continue; }   // the template must say why they are receiving it
     if (!k.consent || !k.consent.text || !k.consent.date) { skip("no_consent"); continue; }
     if (!(k.tags || []).some((t) => c.tags.includes(t))) { skip("tags_changed"); continue; }
+    if (!hasConsent(k, c.require_consent)) { skip("no_updates_consent"); continue; }   // v834 - checked again at send time (they may have said no since)
+    if (c.mkt_month && k.mkt_note_last === c.mkt_month) { skip("mkt_note_already"); continue; }   // v834 - one market note per owner per month (two areas: the first only)
     if (k.last_mkt && now - Date.parse(k.last_mkt) < freq && !retry131049Ok(c, k, now)) {
       if (c.retry_131049 && Number(k.skip_code) === 131049) { skip("retry_131049_too_soon"); const due = Date.parse(k.last_mkt) + (c.retry_days || 2) * DAY; if (!keepLater.some((x) => x.d === d)) keepLater.push({ d, due }); }
       else skip("messaged_this_week");
@@ -645,7 +653,7 @@ export async function campStep(env, c, deps, dry) {
       await putJ(env, "camp_msg_" + wamid, { cid: c.id, d, at: new Date(now).toISOString(), st: "sent", link: code || undefined, api: usedApi, fallback: fbWhy || undefined });
       if (k.skip_code) delete k.skip_code;   // v817 - a delivered send clears the 131049 mark
       await statusRow(env, wamid, { cid: c.id, d, sent: new Date(now).toISOString() });
-      k.last_mkt = new Date(now).toISOString(); k.last_camp = c.id; k.last_wamid = wamid; await putJ(env, "camp_contact_" + d, k);
+      k.last_mkt = new Date(now).toISOString(); k.last_camp = c.id; k.last_wamid = wamid; if (c.mkt_month) k.mkt_note_last = c.mkt_month; await putJ(env, "camp_contact_" + d, k);
       if (code) { const L = await getJ(env, "camp_link_" + code, null); if (L) { L.wamid = wamid; await putJ(env, "camp_link_" + code, L); } }
       if (bo && bo.n) { await env.MEETINGS.delete("camp_backoff_" + c.id); bo.n = 0; }   // a good send ends the back-off run
     } else {
@@ -723,6 +731,10 @@ export async function campaignRoute(request, env, url, deps) {
   const key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
   const now = (deps && deps.now) || Date.now();
   const viewer = campViewer(env, url, deps);
+  if (p === "/momo/campaigns/notes" || p === "/momo/campaigns/notes/api") {   // v834 - monthly market notes (both viewers approve; sending is the owner's)
+    const pageFn = deps && typeof deps.page === "function" ? deps.page : (k0, r0, body) => '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Market notes</title></head><body>' + body + '</body></html>';
+    return notesRoute(request, env, url, { owner, viewer, key, rk, now, page: pageFn });
+  }
   if (p === "/momo/campaigns/unread" && request.method === "GET") return J(Object.assign({ ok: true, viewer }, await unreadAll(env, viewer)));   // v806
   if ((p === "/momo/campaigns/audience" || p === "/momo/campaigns/contacts") && request.method === "GET") {   // v816 - owner only
     if (!owner) return new Response("not found", { status: 404 });
@@ -883,7 +895,7 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
   const S = blankStats(); S.branch = {}; S.rday = {}; S.oday = {}; S.bday = {}; S.handovers = 0;
   for (const { S: s } of runs) { for (const f of ["uclicks", "clicks", "optouts", "blocks"]) S[f] += s[f] || 0; S.handovers += s.handovers || 0;
     for (const m of ["day", "rday", "oday", "bday", "branch"]) for (const [k, v] of Object.entries(s[m] || {})) S[m][k] = (S[m][k] || 0) + v; }
-  const head = '<div class=hg>' + [["Contacts", cix.length], ["People messaged", T.sent], ["Reply rate", pc(T.sent ? T.replied / T.sent : 0)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
+  const head = '<div class=hg>' + [["Contacts", cix.length], ["People messaged", T.sent], ["Reply rate", pc(T.sent ? T.replied / T.sent : 0)], ["Consent to updates", consentN]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>' + await mnLinkCard(env, q, now);   // v834
   const pick = parents.length > 1 ? '<div class=pk>' + parents.map((PP) => '<a class="pkc' + (PP.id === P.id ? " on" : "") + '" href="/momo/campaigns' + q + '&c=' + encodeURIComponent(PP.id) + '"><span class=pkn>' + esc(PP.title) + '</span>' + (PP.id === P.id ? "" : badgeHtml(unreadP(PP))) + '</a>').join("") + '</div>' : "";
   const nu = unreadP(P); for (const r of runs) await markSeen(env, viewer, r.c.id, r.S, now);   // v806 - opening the parent clears its runs' badges
   const live = runs.find((r) => r.c.status === "live"), lastSent = runs.slice().reverse().find((r) => runSent(r.S)), pending = runs.filter((r) => r.c.status === "draft" || r.c.status === "paused");
