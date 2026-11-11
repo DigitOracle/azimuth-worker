@@ -96,6 +96,12 @@ export const WA_TEMPLATES = {
     example: ["Ahmed", "Business Bay", "average 1-bed rents rose 3% this quarter and 4 new buildings handed over nearby"],
     buttons: [{ type: "QUICK_REPLY", text: "Exploring selling" }, { type: "QUICK_REPLY", text: "Exploring leasing" }, { type: "QUICK_REPLY", text: "Stop messages" }],
   },
+  najjuko_market_update_v2: {   // v835 (Kendall 11 Nov 2026: "submit to Meta asap") - v1 wording + an IMAGE header: our own area render (Business Bay flythrough frame 39, 1.91:1)
+    name: "najjuko_market_update_v2", language: "en", category: "MARKETING", header_image_key: "tplhdr_market_update_businessbay",
+    body: "Hi {{1}}, your monthly market note for {{2}}: {{3}}\n\nIf anything changes with your property, just reply here and I'll help.\n\nNajjuko · FN Realty · BRN 98949. Tap Stop and I'll delete your details.",
+    example: ["Ahmed", "Business Bay", "average 1-bed rents rose 3% this quarter and 4 new buildings handed over nearby"],
+    buttons: [{ type: "QUICK_REPLY", text: "Exploring selling" }, { type: "QUICK_REPLY", text: "Exploring leasing" }, { type: "QUICK_REPLY", text: "Stop messages" }],
+  },
   digitalchemy_event_countdown: {
     name: "digitalchemy_event_countdown", language: "en", category: "MARKETING",
     body: "Hi {{1}}, {{2}} starts in {{3}} days. The DigitAlchemy team will be there. Would you like to meet?",
