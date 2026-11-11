@@ -1,6 +1,6 @@
 // v700 (Kendall, 3 Nov 2026: "Go reels"): the Reels card on Momo's front door (Najjuko's and Kendall's), modelled on src/work_presentations.js.
 // One entry = one finished video. KV keys in MEETINGS:
-//   reels_index        JSON list of {slug, title, event?, date?, features?, secs?, format?, video_key, caption?, group?}
+//   reels_index        JSON list of {slug, title, event?, date?, features?, secs?, format?, video_key, caption?, group?, audience?}
 //   vid_<video_key>    the video, through the existing PUT /video_upload + GET /video/<key> route (KV up to 24 MiB)
 //   vidposter_<key>    its poster jpg (PUT /video_upload?poster=1), served at /video/<key>?poster=1
 // Public, no key: /reel/<slug> share page (the video and its title).
@@ -27,8 +27,12 @@ export function cleanReel(x) {
   if (FORMATS.includes(String(x.format || ""))) e.format = String(x.format);
   if (x.caption) e.caption = String(x.caption).trim().slice(0, 3000);
   if (x.group) { const g = one(x.group, 60); if (g) e.group = g; }   // v830 - entries sharing a group show as one card
+  // v832 (Kendall, 11 Nov 2026): optional audience = person ids that see this reel in their Reels list (e.g. ["kendall"]).
+  // No audience (or an empty one) = everyone, exactly as before. The public /reel/<slug> share link still works: it is a direct link.
+  if (Array.isArray(x.audience)) { const a = x.audience.map((p) => String(p || "").trim().toLowerCase()).filter((p) => REELS_PEOPLE.includes(p)); if (a.length) e.audience = [...new Set(a)]; }
   return e;
 }
+export const reelsFor = (items, who) => items.filter((e) => !e.audience || e.audience.includes(who));
 export async function readReels(env) {
   let r = [];
   try { r = JSON.parse(await env.MEETINGS.get("reels_index")) || []; } catch (e) {}
@@ -106,7 +110,7 @@ export async function reelsRoute(request, env, url, deps) {
   const who = typeof deps.person === "function" ? deps.person(env, url) : "";
   if (!REELS_PEOPLE.includes(who) || (who === "najjuko" && typeof deps.isNaj === "function" && !deps.isNaj(env, url))) return new Response("not found", { status: 404 });
   if (p === "/momo/work/reels" && request.method === "GET") {
-    return new Response(deps.page(key, rk, reelsBody(key, rk, await readReels(env), url.origin)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    return new Response(deps.page(key, rk, reelsBody(key, rk, reelsFor(await readReels(env), who), url.origin)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   // v751 (Kendall, 4 Nov 2026: "I also need a delete button"): drop the entry from reels_index (re-read just before the write),
   // then delete its video + poster unless another entry still uses the same video_key.
@@ -126,6 +130,6 @@ export async function reelsRoute(request, env, url, deps) {
     }
     return new Response(JSON.stringify({ ok: true, deleted: 1 }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   }
-  if (p === "/momo/work/reels/list" && request.method === "GET") return new Response(JSON.stringify(reelsSorted(await readReels(env))), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/reels/list" && request.method === "GET") return new Response(JSON.stringify(reelsSorted(reelsFor(await readReels(env), who))), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   return new Response("not found", { status: 404 });
 }
