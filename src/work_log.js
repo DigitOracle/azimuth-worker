@@ -1041,7 +1041,8 @@ export async function workRoute(request, env, url, deps) {
   if (p.startsWith("/momo/work/reels")) return reelsRoute(request, env, url, deps);   // v700 - Reels: Najjuko and Kendall (its own gate)
   if (p.startsWith("/momo/work/presentations")) return presRoute(request, env, url, deps);   // v684 - Presentations: Najjuko and Kendall (its own gate)
   if (p.startsWith("/momo/work/brokers")) return brokersRoute(request, env, url, deps);   // v682 - Brokers: the DLD register, her key only (its own gate)
-  if (p.startsWith("/momo/work/sheets")) return sheetsRoute(request, env, url, deps);   // v672 - Product data sheets: Najjuko and Kendall (its own gate)
+  if (p.startsWith("/momo/work/sheets")) return sheetsRoute(request, env, url, deps);
+  if (p.startsWith("/momo/work/pics/")) return picsRoute(request, env, url, deps);   // v837 - picture cards (src/work_sheets.js PIC_CARDS)   // v672 - Product data sheets: Najjuko and Kendall (its own gate)
   if (p.startsWith("/momo/work/briefs")) return briefsRoute(request, env, url, deps);   // v667 - Product briefs: Kendall's key only (its own gate); sits before /momo/work/brief (the dossiers)
   if (p.startsWith("/momo/work/ggu")) return gguRoute(request, env, url, deps);   // v650 - GGU (Golden Gate University): Kendall's key only (its own gate)
   if (p.startsWith("/momo/work/speaking")) return speakingRoute(request, env, url, deps);   // v646 - Speaking engagements: Kendall's key only (its own gate)
@@ -1603,7 +1604,7 @@ import { PDF_TOOLS } from "./pdf_tools.js";
 import { speakingRoute } from "./work_speaking.js";
 import { gguRoute } from "./work_ggu.js";
 import { briefsRoute } from "./work_briefs.js";
-import { sheetsRoute } from "./work_sheets.js";   // v672   // v667
+import { sheetsRoute, picsRoute } from "./work_sheets.js";   // v672   // v667
 import { brokersRoute } from "./work_brokers.js";   // v682 - the Brokers card (Najjuko only)
 import { presRoute } from "./work_presentations.js";
 import { reelsRoute } from "./work_reels.js";

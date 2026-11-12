@@ -155,7 +155,8 @@ export const infoOf = (e, items) => {
   return i && i.kind === "image" ? i : null;
 };
 export const pairedSlugs = (items) => new Set(items.map((e) => infoOf(e, items)).filter(Boolean).map((i) => i.slug));
-export function sheetsBody(key, rk, items, origin, who) {
+export function sheetsBody(key, rk, items, origin, who, o) {
+  o = o || {};   // v837 - the picture cards reuse this page: o.title, o.what (the WhatsApp/email noun), o.emptyTitle, o.emptyText
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
   const hide = pairedSlugs(items), all = items; items = items.filter((e) => !hide.has(e.slug));
   const groups = []; items.forEach((e) => { const g = String(e.group || "Data sheets"); if (!groups.includes(g)) groups.push(g); });
@@ -168,15 +169,15 @@ export function sheetsBody(key, rk, items, origin, who) {
   };
   const list = items.length
     ? groups.map((g) => { const l = items.filter((e) => String(e.group || "Data sheets") === g); return '<details class=grp open><summary>' + esc(g) + '<span class=n>' + l.length + '</span></summary><div class=g>' + l.map(tile).join("") + '</div></details>'; }).join("")
-    : '<div class=empty id=pds_empty><svg viewBox="0 0 24 24" width=34 height=34 fill="none" stroke="#C5A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + SHEETS_ICON + '</svg><p><b>Sheets coming</b></p><p>Your product data sheets are being checked. They will appear here, ready to send by WhatsApp or email.</p></div>';
-  return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Product data sheets</h1>' + list
+    : '<div class=empty id=pds_empty><svg viewBox="0 0 24 24" width=34 height=34 fill="none" stroke="#C5A56A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden=true>' + SHEETS_ICON + '</svg><p><b>' + esc(o.emptyTitle || "Sheets coming") + '</b></p><p>' + esc(o.emptyText || "Your product data sheets are being checked. They will appear here, ready to send by WhatsApp or email.") + '</p></div>';
+  return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>' + esc(o.title || "Product data sheets") + '</h1>' + list
     + '<div class=sh id=pds_sh><div class=shc><b id=pds_t></b><a class=b id=pds_w target=_blank rel=noopener>WhatsApp</a><a class=b id=pds_e>Email</a><button class=b id=pds_c type=button>Copy link</button><a class="b o" id=pds_o target=_blank rel=noopener>Open</a><a class="b o" id=pds_i target=_blank rel=noopener style="display:none">Open infographic</a><button class="b x" id=pds_x type=button>Close</button></div></div>'
     + '<style>.grp{border:1px solid #E7E1D6;border-radius:14px;background:#FFFDF9;margin:0 0 10px;padding:0 10px}.grp summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;padding:12px 2px;font:600 1rem Fraunces,serif;color:#0A4F4A}.grp summary::-webkit-details-marker{display:none}.grp .n{font:600 .75rem "IBM Plex Mono",monospace;color:#8A6F3E;border:1px solid #C5A56A;border-radius:999px;padding:2px 8px}.grp[open]>summary{border-bottom:1px solid #EEE8DD;margin-bottom:10px}'
     + '.g{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:0 0 12px}.tl{border:1px solid #E7E1D6;background:#fff;border-radius:12px;padding:6px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px}.tl img{width:100%;aspect-ratio:3/4;object-fit:cover;object-position:top;border-radius:8px;display:block}.tl span{font:600 .78rem "IBM Plex Sans",sans-serif;color:#1C2321;line-height:1.25}.tl .me{font:500 .62rem "IBM Plex Mono",monospace;color:#8A6F3E;font-style:normal}.tl .pdf{display:flex;width:100%;align-items:center;justify-content:center;aspect-ratio:3/4;border-radius:8px;background:#0A4F4A;color:#fff;font:700 .9rem "IBM Plex Mono",monospace}'
     + '.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 18px;border:1px dashed #C5A56A;border-radius:18px;text-align:center;color:#5F6B66}.empty p{margin:0}.empty b{font-family:Fraunces,serif;font-size:1.1rem;color:#0A4F4A}'
     + '.sh{position:fixed;inset:0;background:rgba(12,20,19,.55);display:none;align-items:flex-end;z-index:50}.sh.on{display:flex}.shc{background:#FAF7F1;width:100%;max-width:560px;margin:0 auto;border-radius:18px 18px 0 0;padding:18px 16px 28px;display:flex;flex-direction:column;gap:8px}.shc b{font-family:Fraunces,serif;font-size:1.05rem;color:#0A4F4A;margin-bottom:6px}.b{border:1px solid #0A4F4A;color:#0A4F4A;background:#fff;border-radius:999px;padding:11px 14px;font:600 .9rem "IBM Plex Sans",sans-serif;text-decoration:none;text-align:center;cursor:pointer}.b.o{border-color:#C5A56A;color:#8A6F3E}.b.x{border-color:#D8D1C4;color:#5F6B66}.b.ok{background:#0A4F4A;color:#fff}</style>'
-    + '<script>(function(){var SIG="' + (SIGN[who] || SIGN.najjuko) + '";function E(i){return document.getElementById(i)}var sh=E("pds_sh");'
-    + 'document.querySelectorAll(".tl").forEach(function(b){b.onclick=function(){var t=b.dataset.t,s=b.dataset.s,d=b.dataset.d;E("pds_t").textContent=t;E("pds_w").href="https://wa.me/?text="+encodeURIComponent(t+" - product data sheet"+(d?" (PDF)":"")+"\\n"+s);E("pds_e").href="mailto:?subject="+encodeURIComponent(t+" - product data sheet")+"&body="+encodeURIComponent("Hello,\\n\\nPlease find the product data sheet for "+t+" here:\\n"+s+SIG);E("pds_o").href=b.dataset.f;E("pds_o").textContent=d?"Open PDF":"Open";E("pds_i").style.display=b.dataset.i?"":"none";if(b.dataset.i)E("pds_i").href=b.dataset.i;E("pds_c").dataset.l=s;E("pds_c").textContent="Copy link";E("pds_c").classList.remove("ok");sh.classList.add("on")}});'
+    + '<script>(function(){var SIG="' + (SIGN[who] || SIGN.najjuko) + '",WHAT="' + esc(o.what || "product data sheet") + '";function E(i){return document.getElementById(i)}var sh=E("pds_sh");'
+    + 'document.querySelectorAll(".tl").forEach(function(b){b.onclick=function(){var t=b.dataset.t,s=b.dataset.s,d=b.dataset.d;E("pds_t").textContent=t;E("pds_w").href="https://wa.me/?text="+encodeURIComponent(t+" - "+WHAT+(d?" (PDF)":"")+"\\n"+s);E("pds_e").href="mailto:?subject="+encodeURIComponent(t+" - "+WHAT)+"&body="+encodeURIComponent("Hello,\\n\\nPlease find the "+WHAT+" for "+t+" here:\\n"+s+SIG);E("pds_o").href=b.dataset.f;E("pds_o").textContent=d?"Open PDF":"Open";E("pds_i").style.display=b.dataset.i?"":"none";if(b.dataset.i)E("pds_i").href=b.dataset.i;E("pds_c").dataset.l=s;E("pds_c").textContent="Copy link";E("pds_c").classList.remove("ok");sh.classList.add("on")}});'
     + 'E("pds_x").onclick=function(){sh.classList.remove("on")};sh.onclick=function(e){if(e.target===sh)sh.classList.remove("on")};E("pds_c").onclick=function(){var b=E("pds_c");navigator.clipboard.writeText(b.dataset.l).then(function(){b.textContent="Copied";b.classList.add("ok")},function(){b.textContent=b.dataset.l})}})()</script>';
 }
 
@@ -185,8 +186,34 @@ export async function sheetsRoute(request, env, url, deps) {
   const who = typeof deps.person === "function" ? deps.person(env, url) : "";
   if (!SHEETS_PEOPLE.includes(who) || (who === "najjuko" && typeof deps.isNaj === "function" && !deps.isNaj(env, url))) return new Response("not found", { status: 404 });
   if (p === "/momo/work/sheets" && request.method === "GET") {
-    return new Response(deps.page(key, rk, sheetsBody(key, rk, sheetsFor(await readSheetsIndex(env), who), url.origin, who)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+    return new Response(deps.page(key, rk, sheetsBody(key, rk, notPics(sheetsFor(await readSheetsIndex(env), who)), url.origin, who)), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
-  if (p === "/momo/work/sheets/list" && request.method === "GET") return new Response(JSON.stringify(sheetsFor(await readSheetsIndex(env), who)), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  if (p === "/momo/work/sheets/list" && request.method === "GET") return new Response(JSON.stringify(notPics(sheetsFor(await readSheetsIndex(env), who))), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
   return new Response("not found", { status: 404 });
+}
+
+// v837 (Kendall, 12 Nov 2026: "its OWN card ... it will get lost in there") - PICTURE CARDS on the Momo front door. The pictures are ordinary
+// pds_index images (same KV keys, same public /pds/ files); a card shows the images whose `group` is its group, and the Product data sheets
+// card no longer shows those groups. A card with an `owner` shows only that person's own uploads (uploaded_by), so it is private to them.
+// New pictures: push_logo_pic.py (KV only, no deploy). A new CARD is a code change (one line here).
+export const PIC_CARDS = [
+  { id: "najma-logo", title: "Najma logo pictures", group: "Najma logo pictures", people: ["najjuko", "kendall"] },
+  { id: "kendall-pictures", title: "Dr. Kendall pictures", group: "Kendall pictures", people: ["kendall"], owner: "kendall" },   // Kendall 12 Nov: his photoshoot pictures, private to his key
+];
+const PIC_GROUPS = new Set(PIC_CARDS.map((c) => c.group));
+export const notPics = (items) => items.filter((e) => !PIC_GROUPS.has(String(e.group || "")));
+export const PICS_ICON = '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>';
+const picItems = (c, idx, who) => sheetsFor(idx, who).filter((e) => e.kind === "image" && String(e.group || "") === c.group && (!c.owner || e.uploaded_by === c.owner));
+export async function picCardsFor(env, who) {
+  const cards = PIC_CARDS.filter((c) => c.people.includes(who)); if (!cards.length) return [];
+  const idx = await readSheetsIndex(env);
+  return cards.map((c) => { const it = picItems(c, idx, who), f = it[0]; return { id: c.id, title: c.title, n: it.length, cover: f ? (f.thumb ? "/pds/t/" + f.slug + ".jpg" : "/pds/f/" + f.slug + "." + extOf(f)) : "" }; });
+}
+export async function picsRoute(request, env, url, deps) {
+  const who = typeof deps.person === "function" ? deps.person(env, url) : "", key = url.searchParams.get("key") || "", rk = url.searchParams.get("rk") || "";
+  const m = url.pathname.match(/^\/momo\/work\/pics\/([a-z0-9-]{1,40})$/), c = m && PIC_CARDS.find((x) => x.id === m[1]);
+  if (!c || request.method !== "GET" || !c.people.includes(who) || (who === "najjuko" && typeof deps.isNaj === "function" && !deps.isNaj(env, url))) return new Response("not found", { status: 404 });
+  const items = picItems(c, await readSheetsIndex(env), who);
+  return new Response(deps.page(key, rk, sheetsBody(key, rk, items, url.origin, who, { title: c.title, what: "picture", emptyTitle: "Pictures coming", emptyText: "Your pictures will appear here, ready to send by WhatsApp or email." })),
+    { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
