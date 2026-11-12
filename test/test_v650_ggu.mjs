@@ -19,7 +19,7 @@ for (const k of [NAJ, OTH, ""]) { const r = await post({ action: "import", rec: 
 
 // front door: GGU for Kendall only
 const door = async (k) => (await (await get("/momo?door=1", k)).text());
-const hk = await door(KEN); ok(/<b>GGU<\/b>/.test(hk) && /\/momo\/work\/ggu\?key=/.test(hk) && cards(hk) === 12, "GGU card on Kendall's front door (12 cards, v799 layout)", cards(hk));
+const hk = await door(KEN); ok(/<b>GGU<\/b>/.test(hk) && /\/momo\/work\/ggu\?key=/.test(hk) && cards(hk) === 14, "GGU card on Kendall's front door (14 cards: v799 layout + v837 two picture cards)", cards(hk));
 ok(!/<b>GGU<\/b>/.test(await door(NAJ)) && !/<b>GGU<\/b>/.test(await door(OTH)), "no GGU card for Najjuko or others");
 
 // import + merge
