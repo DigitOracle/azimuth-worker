@@ -509,7 +509,7 @@ export function cleanCampaign(x, prev) {
   if (x.api != null) c.api = x.api === "mm" ? "mm" : "cloud";   // v817 - "mm" = Marketing Messages API; absent = env CAMP_MM_API
   if (x.retry_131049 != null) c.retry_131049 = !!x.retry_131049 && x.retry_131049 !== "off";
   if (x.retry_days != null) c.retry_days = Math.max(1, Math.min(60, parseInt(x.retry_days, 10) || 2));
-  if (x.freq_days != null) c.freq_days =Math.max(1, Math.min(60, parseInt(x.freq_days, 10) || DEFAULTS.freqDays));
+  if (x.freq_days != null) { const fd0 = parseInt(x.freq_days, 10); c.freq_days = fd0 === 0 ? 0 : Math.max(1, Math.min(60, fd0 || DEFAULTS.freqDays)); }   // v838 - explicit 0 = no frequency limit (test campaigns only; real campaigns keep the 1-60 day floor since 0 is never the parsed default)
   if (x.qr != null) c.qr = Math.max(0, Math.min(10, parseInt(x.qr, 10) || 0));
   if (x.link_url != null) c.link_url = cleanTarget(x.link_url);
   if (x.header != null) c.header = x.header && /^(image|video|document)$/.test(x.header.type) && (cleanTarget(x.header.link) || /^\d{5,30}$/.test(String(x.header.id || ""))) ? { type: x.header.type, link: cleanTarget(x.header.link) || undefined, id: x.header.id ? String(x.header.id) : undefined } : null;
