@@ -782,6 +782,9 @@ export async function campaignRoute(request, env, url, deps) {
     }
     if (a === "forget") { if (!owner) return J({ ok: false, error: "owner key" }, 403); const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400);
       await optOut(env, d, "owner_forget", {}, now); return J({ ok: true, removed: await forgetContact(env, d, "owner", now) }); }
+    if (a === "clear_undeliverable") { if (!owner) return J({ ok: false, error: "owner key" }, 403); const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400);
+      const k = await getJ(env, "camp_contact_" + d, null); if (!k) return J({ ok: false, error: "no such contact" }, 404);
+      const had = k.undeliverable; delete k.undeliverable; await putJ(env, "camp_contact_" + d, k); return J({ ok: true, cleared: !!had }); }   // v839 - clears ONLY the undeliverable flag (a prior Meta 131026); does not touch opt-out/consent/tags
     if (a === "mm_status") { if (!owner) return J({ ok: false, error: "owner only" }, 403); return J(await mmOnboarding(env, deps)); }   // v818
     if (a === "alerts") return J({ ok: true, alerts: await getJ(env, "camp_alerts", []), quality: { desk: await getJ(env, "camp_quality_desk", null), main: await getJ(env, "camp_quality_main", null) } });
     if (a === "optout") { const d = DIG(normPhone(b.phone)); if (!d) return J({ ok: false, error: "bad phone" }, 400); return J({ ok: true, fresh: await optOut(env, d, "owner", { note: String(b.note || "").slice(0, 80) }, now) }); }
