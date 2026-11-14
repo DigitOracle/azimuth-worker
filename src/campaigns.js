@@ -202,6 +202,7 @@ async function campAlert(env, deps, kind, text, now) {
 // ---------- phone quality (v726) ----------
 // camp_quality_<desk|main> = {rating: GREEN|YELLOW|RED, raw, event, limit, at}. Missing = no warning from Meta = GREEN.
 const DESK_DISPLAY = "971585446093", MAIN_DISPLAY = "971585876093";   // the two business numbers (public, in the handover), overridable by env
+const NAJ_OWN_NUMBER = "971565484397";   // her own WhatsApp number -- v840 (Kendall 14 Nov): ping her the moment a handover fires
 const phoneKeyOfDisplay = (env, disp) => { const d = DIG(disp); if (!d) return ""; if (d === DIG(env.CAMP_DESK_DISPLAY || DESK_DISPLAY)) return "desk"; if (d === DIG(env.CAMP_MAIN_DISPLAY || MAIN_DISPLAY)) return "main"; return ""; };
 const phoneKeyOfId = (env, pid) => { pid = DIG(pid); if (!pid) return ""; if (pid === DIG(env.WA_DESK_PHONE_ID)) return "desk"; if (pid === DIG(env.WA_PHONE_ID)) return "main"; return ""; };
 export const normRating = (r) => { r = String(r || "").toUpperCase(); return r === "GREEN" || r === "HIGH" ? "GREEN" : r === "YELLOW" || r === "MEDIUM" ? "YELLOW" : r === "RED" || r === "LOW" || r === "FLAGGED" ? "RED" : ""; };
@@ -839,6 +840,17 @@ function svgDonut(parts) {
   const leg = parts.map((p, i) => '<div class=lg><span style="background:' + cols[i % cols.length] + '"></span>' + esc(p[0]) + ' <b>' + p[1] + '</b> <em>' + Math.round(p[1] / tot * 100) + '%</em></div>').join("");
   return '<div class=dn><svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Branch choices">' + arcs + '<text x="60" y="58" text-anchor="middle" font-size="18" font-weight="600" fill="' + INK + '">' + tot + '</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="' + MUTE + '">choices</text></svg><div class=lgs>' + leg + '</div></div>';
 }
+// v840 (Kendall 14 Nov) - her simplified landing: one donut of what happened to everyone in the
+// audience (plain outcomes, not a flow's branch choices). parts: [label, value, color].
+function svgOutcomeDonut(parts, totalHint) {
+  const sum = parts.reduce((a, p) => a + Math.max(0, p[1]), 0), tot = Math.max(sum, totalHint || 0);
+  if (!tot) return '<p class=nd>Nobody in this audience yet.</p>';
+  const C = 2 * Math.PI * 42; let off = 0;
+  const full = tot > sum ? parts.concat([["Not reached yet", tot - sum, "#C9BFA3"]]) : parts;
+  const arcs = full.filter((p) => p[1] > 0).map((p) => { const L = (p[1] / tot) * C; const s = '<circle cx="60" cy="60" r="42" fill="none" stroke="' + p[2] + '" stroke-width="20" stroke-dasharray="' + L.toFixed(2) + ' ' + (C - L).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 60 60)"/>'; off += L; return s; }).join("");
+  const leg = full.filter((p) => p[1] > 0).map((p) => '<div class=lg><span style="background:' + p[2] + '"></span>' + esc(p[0]) + ' <b>' + p[1] + '</b> <em>' + Math.round(p[1] / tot * 100) + '%</em></div>').join("");
+  return '<div class=dn><svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="What happened">' + arcs + '<text x="60" y="58" text-anchor="middle" font-size="18" font-weight="600" fill="' + INK + '">' + tot + '</text><text x="60" y="74" text-anchor="middle" font-size="9" fill="' + MUTE + '">people</text></svg><div class=lgs>' + leg + '</div></div>';
+}
 function svgDaily(days, sends, reps, cap) {
   const W = 340, H = 140, top = 14, bh = 100, max = Math.max(cap, 1, ...sends), bw = Math.floor((W - 30) / days.length);
   const y = (v) => top + bh - (v / max) * bh;
@@ -891,6 +903,26 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
   const nu = unreadP(P); for (const r of runs) await markSeen(env, viewer, r.c.id, r.S, now);   // v806 - opening the parent clears its runs' badges
   const live = runs.find((r) => r.c.status === "live"), lastSent = runs.slice().reverse().find((r) => runSent(r.S)), pending = runs.filter((r) => r.c.status === "draft" || r.c.status === "paused");
   const pst = live ? ST.live : lastSent ? (ST[lastSent.c.status] || [lastSent.c.status, MUTE]) : ["Scheduled / not sent yet", "#8A6F3E"];
+  const card = (t, b) => '<div class=gc><h2>' + t + '</h2>' + b + '</div>';
+  // v840 (Kendall 14 Nov) - "this is all she needs to see": her view drops the funnel, branch donut,
+  // daily chart, rate chart, clicks and the full people list entirely. One outcome donut, four plain
+  // stat cards, and the actual leads waiting on her -- nothing else in this card.
+  if (!owner) {
+    let audience = 0; try { audience = (await buildQueue(env, runs[0].c)).list.length; } catch (e) {}
+    const noReply = Math.max(0, T.delivered - T.replied), otherReplies = Math.max(0, T.replied - (S.handovers || 0));
+    const donutParts = [["To Najjuko", S.handovers || 0, TEAL], ["Other replies", otherReplies, "#5E8C84"], ["Delivered, no reply", noReply, GOLD],
+      ["Couldn't send", T.failed, RED], ["Opted out", S.optouts, "#8A6F3E"]];
+    const herDonut = svgOutcomeDonut(donutParts, audience || T.sent);
+    const statCards = '<div class=hg>' + [["Sent", T.sent], ["Delivered", T.delivered], ["Read", T.read], ["Replied", T.replied]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
+    const hix = await getJ(env, "camp_handover_index", []), cidSet = new Set(runs.map((r) => r.c.id));
+    const leads = hix.filter((h) => h.kind === "follow_up" && cidSet.has(h.cid)).slice(0, 8);
+    const leadsHtml = leads.length ? leads.map((h) => '<div class=ld><div class=ldi>' + ic(I.users, 18) + '</div><div><b>' + esc(h.name || "Unknown") + '</b><span>' + esc((h.answers || []).join(", ") || "Engaged") + ' · ' + esc(String(h.at || "").slice(0, 16).replace("T", " ")) + '</span></div><a class=ldb href="/momo/campaigns/followup' + q + '&c=' + encodeURIComponent(h.cid) + '">Follow up</a></div>').join("") : '<p class=nd>No replies needing follow-up yet.</p>';
+    return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + pick
+      + '<div class=cc><div class=ch><b>' + esc(P.title) + '</b><span class=cs style="background:' + pst[1] + '">' + esc(pst[0]) + '</span></div></div>'
+      + card("What happened", herDonut) + statCards
+      + card("To Najjuko — real leads", leadsHtml)
+      + DASH_CSS + HER_CSS;
+  }
   const first = runs[0].c, fuHref = "/momo/campaigns/followup" + q + "&c=" + encodeURIComponent(P.id);
   const fu = runs.length > 1 ? await followupGroupsMulti(env, runs.map((r) => r.c), now, followupGroups) : await followupGroups(env, first, now);
   const btn = (a, lab, cls, c) => '<button class="cb ' + (cls || "") + '" type=button data-a=' + a + ' data-id="' + esc(c.id) + '">' + lab + '</button>';
@@ -935,12 +967,15 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
     people.push('<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || p.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
       + '<div class=pg><div><i>Number</i>' + esc(maskNum(k.e164 || p.d)) + '</div><div><i>Branch</i>' + esc(br) + '</div><div><i>Last activity</i>' + esc(String((s2 && s2.at) || m.at || "").slice(0, 16).replace("T", " ")) + '</div><div><i>Run</i>Run ' + (ri + 1) + '</div><div><i>Updates consent</i>' + (cu === true ? "Yes" : cu === false ? "No" : "Not asked") + '</div></div>'
       + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(p.cid) + '" data-w="' + esc(p.w) + '">Follow up</button>') + '</div>'); }
-  const card = (t, b) => '<div class=gc><h2>' + t + '</h2>' + b + '</div>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + pick + top
     + card("Funnel (each person once)", funnel) + (first.flow ? card("Branch choices", svgDonut(parts)) : "") + card("Daily sends and replies", daily) + card("Opt-out and block rate", rl) + card("Clicks per link", clicks)
     + card("People (" + people.length + ")", '<input id=psearch class=srch type=search placeholder="Search name or last 4 digits">' + (people.length ? '<div class=pl>' + people.join("") + '</div>' : '<p class=nd>Nobody messaged yet.</p>'))
     + DASH_CSS + KIDS_CSS + DASH_JS;
 }
+const HER_CSS = '<style>.ld{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid ' + LINE + '}.ld:first-of-type{border-top:none;padding-top:0}'
+  + '.ldi{width:34px;height:34px;border-radius:50%;background:#EAF3EF;color:' + TEAL + ';display:flex;align-items:center;justify-content:center;flex:0 0 auto}'
+  + '.ld b{display:block;font:700 .84rem "IBM Plex Sans",sans-serif;color:' + INK + '}.ld span{display:block;font:500 .7rem "IBM Plex Sans",sans-serif;color:' + MUTE + ';margin-top:1px}'
+  + '.ldb{margin-left:auto;font:700 .66rem "IBM Plex Sans",sans-serif;color:' + TEAL + ';border:1.3px solid ' + TEAL + ';border-radius:999px;padding:5px 11px;white-space:nowrap;text-decoration:none;flex:0 0 auto}</style>';
 const KIDS_CSS = '<style>.kg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0}.kg div{border:1px solid ' + LINE + ';border-radius:12px;padding:8px 4px;text-align:center;min-width:0}.kg b{display:block;font:600 1.15rem Fraunces,serif;color:' + TEAL + '}.kg i{font-style:normal;font-size:.64rem;color:' + MUTE + '}'
   + '.kids{margin-top:10px;border-top:1px solid ' + LINE + ';padding-top:8px}.kids summary{font:600 .9rem "IBM Plex Sans",sans-serif;color:' + TEAL + ';cursor:pointer;padding:4px 0}.kc{border:1px solid ' + LINE + ';border-left:3px solid ' + GOLD + ';border-radius:12px;padding:10px;margin:8px 0 0;background:#fff;min-width:0}.kc .ch b{font-size:.92rem}.kl{margin:6px 0 2px;font:600 .8rem "IBM Plex Sans",sans-serif;color:' + INK + ';overflow-wrap:anywhere}.kc .cs{white-space:normal;text-align:center}</style>';
 const DASH_JS = '<script>(function(){var K=new URLSearchParams(location.search).get("key")||"";var sr=document.getElementById("psearch");if(sr)sr.oninput=function(){var v=sr.value.toLowerCase().trim();document.querySelectorAll(".pc").forEach(function(c){c.style.display=!v||c.dataset.s.indexOf(v)>=0?"":"none"})};'
@@ -1045,6 +1080,15 @@ async function flowRun(env, c, f, nid, k, deps, now, trail) {
       const ix = await getJ(env, "camp_handover_index", []); ix.unshift(h); await putJ(env, "camp_handover_index", ix.slice(0, 500));
       await bump(env, c.id, (x) => { x.handovers = (x.handovers || 0) + 1; });
       trail.push({ handover: nid });
+      // v840 (Kendall 14 Nov) - "how would Najjuko know that": the handover index + badge were passive,
+      // nothing told her to go look. Ping her own number the instant a lead comes in. Best-effort: if
+      // she is outside WhatsApp's 24h session window this free-form text may be refused by Meta -- that
+      // never blocks the handover itself, which is already recorded above regardless.
+      if (d !== DIG(NAJ_OWN_NUMBER)) {
+        const pingText = "New lead: " + (k.name || "Someone") + " -- " + (n.note || "engaged with the campaign flow") + " Open Follow Up in Momo.";
+        try { await f2(graph + "/" + pid + "/messages", { method: "POST", headers: { Authorization: "Bearer " + env.WHATSAPP_TOKEN, "Content-Type": "application/json" },
+          body: JSON.stringify({ messaging_product: "whatsapp", to: NAJ_OWN_NUMBER, type: "text", text: { body: pingText } }) }); } catch (e) {}
+      }
     }
     let link = "";
     if (n.type === "doc" || n.type === "brief") { const target = n.type === "brief" ? originOf(env, deps) + "/dp/" + n.brief + "?r=" + dpReader(n.reader) + "&ty=1" : n.link; const code = await makeLink(env, c.id, d, target); link = originOf(env, deps) + "/c/" + code; }   // v771 - the district passport
