@@ -824,7 +824,9 @@ const ST = { draft: ["Draft", "#5F6B66"], live: ["Live", "#0A4F4A"], paused: ["P
 const TEAL = "#0A4F4A", GOLD = "#C5A56A", INK = "#1C2321", MUTE = "#5F6B66", RED = "#A33A2B", LINE = "#E7E1D6";
 const maskNum = (e) => { const d = DIG(e); return d.length > 4 ? "+" + d.slice(0, 3) + " ••• " + d.slice(-4) : "+" + d; };
 const lastDays = (now, n) => { const o = []; for (let i = n - 1; i >= 0; i--) o.push(dubaiDate(now - i * DAY)); return o; };
-const updatesConsent = (k) => { const c = (k && k.consents) || {}; const t = Object.keys(c).find((x) => /update/.test(x)); return t ? c[t].value : null; };
+const updatesConsent = (k) => { const c = (k && k.consents) || {}; const t = Object.keys(c).find((x) => /update/.test(x)); if (t) return c[t].value;
+  if (k && k.source === "DLD Green List") return true;   // v840c (Kendall 14 Nov) - "all have consented, update that": the Green List signup IS the updates consent, not a separate ask
+  return null; };
 function svgFunnel(st) {
   const max = Math.max(1, st[0][1]), W = 340, rh = 30;
   return '<svg viewBox="0 0 ' + W + ' ' + (st.length * rh + 4) + '" width="100%" role="img" aria-label="Funnel">' + st.map(([lab, v], i) => {
@@ -911,7 +913,7 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
     let audience = 0; try { audience = (await buildQueue(env, runs[0].c)).list.length; } catch (e) {}
     const noReply = Math.max(0, T.delivered - T.replied), otherReplies = Math.max(0, T.replied - (S.handovers || 0));
     const donutParts = [["To Najjuko", S.handovers || 0, TEAL], ["Other replies", otherReplies, "#5E8C84"], ["Delivered, no reply", noReply, GOLD],
-      ["Couldn't send", T.failed, RED], ["Opted out", S.optouts, "#8A6F3E"]];
+      ["Opted out", S.optouts, "#8A6F3E"]];   // v840b (Kendall 14 Nov) - "remove the failed from momo, card": failed sends fold into "Not reached yet"
     const herDonut = svgOutcomeDonut(donutParts, audience || T.sent);
     const statCards = '<div class=hg>' + [["Sent", T.sent], ["Delivered", T.delivered], ["Read", T.read], ["Replied", T.replied]].map((x) => '<div class=hc><b>' + esc(x[1]) + '</b><i>' + esc(x[0]) + '</i></div>').join("") + '</div>';
     const hix = await getJ(env, "camp_handover_index", []), cidSet = new Set(runs.map((r) => r.c.id));
@@ -959,17 +961,21 @@ async function dashBody(env, key, rk, now, want, owner, viewer) {
   const rl = svgRate(days, days.map((d) => { const n = S.day[d] || 0; return n ? ((S.oday[d] || 0) + (S.bday[d] || 0)) / n : 0; }));
   const byUrl = {}; for (const r of runs) for (const code of (await getJ(env, "camp_links_" + r.c.id, [])).slice(-2000)) { const L = await getJ(env, "camp_link_" + code, null); if (!L) continue; const u = byUrl[L.url] || (byUrl[L.url] = [L.url, 0, 0]); u[1] += L.clicks || 0; if (L.clicks) u[2]++; }
   const clicks = svgClicks(Object.values(byUrl).sort((a, b) => b[1] - a[1]).slice(0, 8));
-  const LAB = { replied: "Replied", read: "Read", delivered: "Delivered", sent: "Sent", failed: "Failed" }, people = [];
+  const LAB = { replied: "Replied", read: "Read", delivered: "Delivered", sent: "Sent", failed: "Failed" }, fuPeople = [], restPeople = [];
   for (const p of roll.people.slice(0, 300)) { const m = p.m, s2 = p.s2;
     const k = await getJ(env, "camp_contact_" + p.d, null) || {}, oo = await env.MEETINGS.get("camp_optout_" + p.d);
     const status = oo ? "Opted out" : LAB[p.st];
     const br = s2 && s2.path && s2.path.length ? s2.path[s2.path.length - 1] : "-", cu = updatesConsent(k), ri = runs.findIndex((r) => r.c.id === p.cid);
-    people.push('<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || p.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
+    const row = '<div class=pc data-s="' + esc(((k.name || "") + " " + DIG(k.e164 || p.d).slice(-4)).toLowerCase()) + '"><div class=ph><b>' + esc(k.name || "Unknown") + '</b><span class="pst s_' + status.replace(/\s/g, "") + '">' + status + '</span></div>'
       + '<div class=pg><div><i>Number</i>' + esc(maskNum(k.e164 || p.d)) + '</div><div><i>Branch</i>' + esc(br) + '</div><div><i>Last activity</i>' + esc(String((s2 && s2.at) || m.at || "").slice(0, 16).replace("T", " ")) + '</div><div><i>Run</i>Run ' + (ri + 1) + '</div><div><i>Updates consent</i>' + (cu === true ? "Yes" : cu === false ? "No" : "Not asked") + '</div></div>'
-      + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(p.cid) + '" data-w="' + esc(p.w) + '">Follow up</button>') + '</div>'); }
+      + (oo ? "" : '<button class="cb fu" type=button data-a=followup data-id="' + esc(p.cid) + '" data-w="' + esc(p.w) + '">Follow up</button>') + '</div>';
+    (status === "Replied" ? fuPeople : restPeople).push(row); }
+  const peopleBody = '<input id=psearch class=srch type=search placeholder="Search name or last 4 digits">'
+    + '<details class=kids open><summary>Needs follow-up (' + fuPeople.length + ')</summary>' + (fuPeople.length ? '<div class=pl>' + fuPeople.join("") + '</div>' : '<p class=nd>Nobody waiting on a reply right now.</p>') + '</details>'
+    + '<details class=kids><summary>Everyone else (' + restPeople.length + ')</summary>' + (restPeople.length ? '<div class=pl>' + restPeople.join("") + '</div>' : '<p class=nd>Nobody else yet.</p>') + '</details>';
   return '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>' + head + pick + top
     + card("Funnel (each person once)", funnel) + (first.flow ? card("Branch choices", svgDonut(parts)) : "") + card("Daily sends and replies", daily) + card("Opt-out and block rate", rl) + card("Clicks per link", clicks)
-    + card("People (" + people.length + ")", '<input id=psearch class=srch type=search placeholder="Search name or last 4 digits">' + (people.length ? '<div class=pl>' + people.join("") + '</div>' : '<p class=nd>Nobody messaged yet.</p>'))
+    + card("People (" + (fuPeople.length + restPeople.length) + ")", peopleBody)
     + DASH_CSS + KIDS_CSS + DASH_JS;
 }
 const HER_CSS = '<style>.ld{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid ' + LINE + '}.ld:first-of-type{border-top:none;padding-top:0}'
