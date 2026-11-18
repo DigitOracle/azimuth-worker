@@ -970,7 +970,7 @@ async function simpleBody(env, key, rk, now, want, owner, viewer) {
   const quiet = people.filter((p) => !p.replied).sort((a, b) => (a.dnc - b.dnc) || String(a.name || "~").localeCompare(String(b.name || "~")));
   const counts = '<div class=sct><div class=sbig><b>' + people.length + '</b><i>sent</i></div><div class=srow>'
     + [["positive", n("positive")], ["dnc", n("dnc")], ["other", n("other")], ["none", n("none")]].map(([k, v]) => '<div><b style="color:' + KIND[k][1] + '">' + v + '</b><i>' + esc(KIND[k][0]) + '</i></div>').join("") + '</div>'
-    + (notDel ? '<p class=snd>' + notDel + ' of the ' + people.length + ' were not delivered by WhatsApp (its limit on marketing messages). Your own WhatsApp still reaches them.</p>' : "") + '</div>';
+    + (notDel ? '<p class=snd>' + notDel + ' of the ' + people.length + ' were not delivered by WhatsApp. Try your own WhatsApp; if that fails too, call.</p>' : "") + '</div>';
   return '<a class=back href="/momo/campaigns' + q + '">&#8592; Campaigns</a><div class=tag>MOMO</div><h1 class=sh1>' + esc(niceTitle(P)) + '</h1>' + counts
     + '<h2 class=sh2>Replied (' + replied.length + ')</h2>' + (replied.length ? replied.map((p) => simpleRow(p, true)).join("") : '<p class=nd>Nobody has replied yet.</p>')
     + '<h2 class=sh2>Did not reply (' + quiet.length + ')</h2>' + (quiet.length ? quiet.map((p) => simpleRow(p, false)).join("") : '<p class=nd>Everyone replied.</p>')
