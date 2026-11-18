@@ -87,4 +87,5 @@ await campWebhook(env, body({ from: D(5), id: "in2", type: "text", text: { body:
 m9 = getj("camp_msg_w9"); ok(m9.reply === "Also 2 bed?", "the latest reply wins");
 await campWebhook(env, body({ from: D(5), id: "in3", type: "audio", audio: { id: "a" }, context: { id: "w9" } }), { now: deps.now + 120000 });
 ok(getj("camp_msg_w9").reply === "(voice note)", "a voice note is named, not dropped");
+ok(/\+971 50 000 0005/.test(await (await get("k-naj", "/momo/campaigns?c=gl")).text()), "the full number is shown");
 console.log("test_v841_campaigns_simple: " + pass + " passed, 0 failed");

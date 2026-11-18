@@ -923,11 +923,13 @@ export function simplePerson(d, recs, k, optedOut, handover) {
   p.failed = p.failed && !p.delivered;
   return p;
 }
+// v841.2 (Kendall 18 Nov: "why did you not show the entire number?") - the full number; UAE mobiles grouped +971 50 123 4567
+export const fullNum = (e) => { const d = DIG(e); const m = /^971(5\d)(\d{3})(\d{4})$/.exec(d); return m ? "+971 " + m[1] + " " + m[2] + " " + m[3] : "+" + d; };
 const waBtn = (p) => p.dnc || !p.e164 ? '<span class=sdnc>Do not contact</span>' : '<a class=swa href="https://wa.me/' + esc(p.e164) + '" target=_blank rel=noopener>' + ic('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 18.8z"/>', 16) + 'WhatsApp</a>';
 const KIND = { positive: ["Positive", TEAL], dnc: ["Do not contact", RED], other: ["Other reply", "#5F6B66"], none: ["No reply", GOLD] };
 function simpleRow(p, withWords) {
   const said = p.text ? "“" + p.text + "”" + (p.words.length ? " · " + p.words.join(" → ") : "") : p.words.length ? p.words.join(" → ") : "Replied (their words were not saved before 18 Nov)";
-  return '<div class="sp' + (p.dnc ? " dn" : "") + '"><div class=spm><b>' + esc(p.name || "Unknown") + '</b><span class=spn>' + esc(maskNum(p.e164 || p.d)) + (p.failed ? " · not delivered" : "") + '</span>'
+  return '<div class="sp' + (p.dnc ? " dn" : "") + '"><div class=spm><b>' + esc(p.name || "Unknown") + '</b><span class=spn>' + esc(fullNum(p.e164 || p.d)) + (p.failed ? " · not delivered" : "") + '</span>'
     + (withWords ? '<span class=spk style="color:' + KIND[p.kind][1] + '">' + esc(KIND[p.kind][0]) + '</span><p class=spt>' + esc(said) + '</p>' : '') + '</div>' + waBtn(p) + '</div>';
 }
 // v841 - a parent whose title is still the machine default ("greenlist-owners · fnr-greenlist-r2-16nov") shows its first run's own name instead
