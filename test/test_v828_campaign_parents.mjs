@@ -43,7 +43,7 @@ if (tot.sent !== 4 || tot.delivered !== 3 || tot.read !== 3 || tot.failed !== 1)
 const P2 = await buildParents(env, [all[2], all[3]]); if (pickParent(P2).id !== "dh2") fail("draft-only parent became default");
 
 // the card
-const html = await (await campaignRoute(new Request("https://x/momo/campaigns"), env, new URL("https://x/momo/campaigns?key=rk-owner"), deps)).text();
+const html = await (await campaignRoute(new Request("https://x/momo/campaigns"), env, new URL("https://x/momo/campaigns?key=rk-owner&full=1"), deps)).text();
 if (!/id="camp_pja-frond-b"/.test(html)) fail("parent card missing");
 if (!/Runs \(3\)/.test(html) || !/id="run_r1"/.test(html) || !/id="run_r3"/.test(html)) fail("child runs missing");
 if (!/<b>4<\/b><i>Messaged<\/i>/.test(html)) fail("parent tiles must show de-duplicated totals");
@@ -63,7 +63,7 @@ if (r.sent !== 0 || r.skipped.retry_131049_too_soon !== 1) fail("step " + JSON.s
 const c5 = getj("camp_r5"); if (c5.status !== "live") fail("a run with people waiting for retry must NOT be closed as done (got " + c5.status + ")");
 const q5 = getj("camp_q_r5"); if (!q5.later || q5.later.length !== 1 || q5.later[0].due !== Date.parse("2026-11-09T14:00:00Z")) fail("q.later " + JSON.stringify(q5.later));
 const s5 = getj("camp_stats_r5"); if (s5.next_eligible !== "2026-11-09T14:00:00.000Z") fail("next_eligible " + s5.next_eligible);
-const html2 = await (await campaignRoute(new Request("https://x/momo/campaigns"), env, new URL("https://x/momo/campaigns?key=rk-owner&c=r5"), deps)).text();
+const html2 = await (await campaignRoute(new Request("https://x/momo/campaigns"), env, new URL("https://x/momo/campaigns?key=rk-owner&c=r5&full=1"), deps)).text();
 if (!/next eligible at 18:00 Dubai, 9 Nov/.test(html2)) fail("child card must show next eligible");
 // once due, the person comes back from q.later; the tick tries to send (fetch throws -> a failed attempt, not silently dropped)
 const later = await campStep(env, getj("camp_r5"), Object.assign({}, deps, { now: Date.parse("2026-11-09T14:01:00Z") }), false);

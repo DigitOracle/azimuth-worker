@@ -417,6 +417,10 @@ export async function campWebhook(env, body, deps) {
       let rep = 0, tap = 0;
       if (!mrec.replied) { mrec.replied = true; rep = 1; out.replies++; }
       if (isBtn && !mrec.tap) { mrec.tap = String(txt).slice(0, 40) || true; tap = 1; out.taps++; }
+      // v841 - keep what they actually wrote (Kendall 18 Nov: "the replies"), latest reply wins; buttons are already kept as tap / flow path
+      let said = 0; if (!isBtn) { const w = msg.type === "text" ? String(txt || "").trim() : msg.type === "audio" || msg.type === "voice" ? "(voice note)" : msg.type === "image" ? "(photo) " + String((msg.image && msg.image.caption) || "") : msg.type === "document" ? "(document)" : msg.type ? "(" + msg.type + ")" : "";
+        if (w) { mrec.reply = w.trim().slice(0, 500); mrec.reply_at = new Date(now).toISOString(); said = 1; } }
+      if (said && !rep && !tap) await putJ(env, mk, mrec);
       if (rep || tap) { await putJ(env, mk, mrec); await bump(env, cid, (x) => { x.replies += rep; x.taps += tap; if (rep) { x.rday = x.rday || {}; x.rday[dubaiDate(now)] = (x.rday[dubaiDate(now)] || 0) + 1; } }); }
     }
   } catch (e) { out.error = String(e && e.message || e).slice(0, 120); }
@@ -742,7 +746,8 @@ export async function campaignRoute(request, env, url, deps) {
     return new Response(deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Follow-up</title></head><body>' + body + '</body></html>', { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
   if (p === "/momo/campaigns" && request.method === "GET") {
-    const body = await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer);
+    const body = owner && url.searchParams.get("full") === "1" ? await dashBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer)   // v841 - the old dashboard, Kendall only
+      : await simpleBody(env, key, rk, now, url.searchParams.get("c") || "", owner, viewer);
     const html = deps && typeof deps.page === "function" ? deps.page(key, rk, body) : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Campaigns</title></head><body>' + body + '</body></html>';
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
   }
@@ -884,6 +889,103 @@ const runLabel = (c, i, n) => { const nm = String(c.name || ""), sub = nm.indexO
 const dubaiAt = (iso) => { const d = new Date(Date.parse(iso) + 4 * 3600e3); return isNaN(d) ? "" : d.toISOString().slice(11, 16) + " Dubai, " + d.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]; };
 const waitingRun = (c, S) => c.status === "live" && !runSent(S) && !!(S && S.next_eligible);   // v828 - live, but everyone queued is "too soon": scheduled, not done
 const runStatus = (c, S) => (runScheduled(c, S) && c.status !== "live") || waitingRun(c, S) ? ["Scheduled / not sent yet", "#8A6F3E"] : (ST[c.status] || [c.status, MUTE]);
+// ---------- v841 (Kendall 18 Nov 2026) - the SIMPLE campaigns view, for both viewers ----------
+// "Total sent, the replies, and a WhatsApp follow-up for responders and non-responders, respecting do not contact."
+// The list shows each campaign once (tests folded away). Opening one shows ONLY: how many were sent; replies counted
+// as positive / do not contact / other / no reply; every person who replied with their words and a wa.me button;
+// everyone who did not reply with the same button. Do-not-contact people are marked and get no button.
+// Speed (the old page took minutes on a phone): every KV read here runs in parallel in small batches, and nothing
+// reads the whole contact list, the tracked links, or the follow-up groups. The old dashboard stays at &full=1 (Kendall only).
+async function pmap(arr, n, fn) { const out = new Array(arr.length); let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, arr.length) }, async () => { while (i < arr.length) { const j = i++; out[j] = await fn(arr[j], j); } }));
+  return out; }
+export const isTestCamp = (P) => /\btest/i.test(P.title || "") || P.runs.every((r) => /test/i.test(r.c.id));
+const NOT_POSITIVE = /^(not now|no thanks|stop)/i;
+// One person across every run of the parent. Pure, so the tests can feed it records directly.
+// recs: [{ m (camp_msg), s2 (camp_state), flow (camp_flow) }]; k = camp_contact; optedOut = camp_optout present; handover = in camp_handover_index
+export function simplePerson(d, recs, k, optedOut, handover) {
+  const p = { d, name: (k && k.name) || "", e164: DIG((k && k.e164) || d), replied: false, dnc: !!optedOut, positive: !!handover, words: [], text: "", textAt: "", at: "", delivered: false, failed: false };
+  for (const { m, s2, flow } of recs) {
+    if (!m) continue;
+    if (m.optout) p.dnc = true;
+    if (m.delivered || m.read) p.delivered = true; else if (m.st === "failed") p.failed = true;
+    const at = String((s2 && s2.at) || m.reply_at || m.at || ""); if (at > p.at) p.at = at;
+    if (m.replied || m.tap || (s2 && s2.path && s2.path.length)) p.replied = true;
+    for (const step of (s2 && s2.path) || []) {   // "node.option" -> the option's own words
+      const [nid, oid] = String(step).split("."), n = flow && flow.nodes && flow.nodes[nid], o = n && (n.buttons || n.rows || []).find((b) => String(b.id) === oid);
+      const t = o ? o.title : ""; if (!t) continue; if (o.optout) p.dnc = true; else if (!NOT_POSITIVE.test(t)) p.positive = true;
+      if (!p.words.includes(t)) p.words.push(t); }
+    if (typeof m.tap === "string" && m.tap && !p.words.includes(m.tap)) { p.words.push(m.tap); if (!NOT_POSITIVE.test(m.tap) && !isOptOutText(m.tap)) p.positive = true; if (isOptOutText(m.tap)) p.dnc = true; }
+    if (m.reply && (!p.text || String(m.reply_at || "") >= p.textAt)) { p.text = String(m.reply); p.textAt = String(m.reply_at || ""); }
+  }
+  if (p.dnc) p.positive = false;
+  p.kind = p.dnc ? "dnc" : !p.replied ? "none" : p.positive ? "positive" : "other";
+  p.failed = p.failed && !p.delivered;
+  return p;
+}
+const waBtn = (p) => p.dnc || !p.e164 ? '<span class=sdnc>Do not contact</span>' : '<a class=swa href="https://wa.me/' + esc(p.e164) + '" target=_blank rel=noopener>' + ic('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 18.8z"/>', 16) + 'WhatsApp</a>';
+const KIND = { positive: ["Positive", TEAL], dnc: ["Do not contact", RED], other: ["Other reply", "#5F6B66"], none: ["No reply", GOLD] };
+function simpleRow(p, withWords) {
+  const said = p.text ? "“" + p.text + "”" + (p.words.length ? " · " + p.words.join(" → ") : "") : p.words.length ? p.words.join(" → ") : "Replied (their words were not saved before 18 Nov)";
+  return '<div class="sp' + (p.dnc ? " dn" : "") + '"><div class=spm><b>' + esc(p.name || "Unknown") + '</b><span class=spn>' + esc(maskNum(p.e164 || p.d)) + (p.failed ? " · not delivered" : "") + '</span>'
+    + (withWords ? '<span class=spk style="color:' + KIND[p.kind][1] + '">' + esc(KIND[p.kind][0]) + '</span><p class=spt>' + esc(said) + '</p>' : '') + '</div>' + waBtn(p) + '</div>';
+}
+// v841 - a parent whose title is still the machine default ("greenlist-owners · fnr-greenlist-r2-16nov") shows its first run's own name instead
+export const niceTitle = (P) => /^[a-z0-9_-]+( · [a-z0-9_-]+)*$/.test(String(P.title || "")) && P.runs[0] && P.runs[0].c.name ? String(P.runs[0].c.name) : String(P.title || "");
+async function simpleList(env, q, parents, viewer) {
+  const rows = await pmap(parents, 6, async (P) => {
+    const u = await pmap(P.runs, 6, async (r) => unreadOf(r.S, await getJ(env, seenKey(viewer, r.c.id), null)));
+    const nu = u.reduce((o, x) => ({ replies: o.replies + x.replies, clicks: 0, total: o.total + x.replies }), { replies: 0, clicks: 0, total: 0 });
+    const last = P.runs[P.runs.length - 1].c;
+    return { P, test: isTestCamp(P), html: '<a class=sl href="/momo/campaigns' + q + '&c=' + encodeURIComponent(P.id) + '"><span class=slt>' + esc(niceTitle(P)) + '</span><span class=slm>' + esc(runDate(last) || "") + (P.runs.length > 1 ? ' · ' + P.runs.length + ' sends' : '') + '</span>' + badgeHtml(nu) + '</a>' };
+  });
+  const real = rows.filter((r) => !r.test), tests = rows.filter((r) => r.test);
+  return (real.length ? real.map((r) => r.html).join("") : '<p class=nd>No campaigns yet.</p>')
+    + (tests.length ? '<details class=stest><summary>Tests (' + tests.length + ')</summary>' + tests.map((r) => r.html).join("") + '</details>' : "");
+}
+export async function simpleData(env, P) {
+  const flows = {}; for (const r of P.runs) if (r.c.flow && !(r.c.flow in flows)) flows[r.c.flow] = await getJ(env, "camp_flow_" + r.c.flow, null);
+  const pairs = (await pmap(P.runs, 4, async (r) => (await getJ(env, "camp_msgs_" + r.c.id, [])).map((w) => [r.c, w]))).flat();
+  const recs = await pmap(pairs, 24, async ([c, w]) => { const m = await getJ(env, "camp_msg_" + w, null); if (!m || !m.d) return null;
+    const s2 = c.flow ? await getJ(env, "camp_state_" + c.id + "_" + m.d, null) : null; return { d: m.d, m, s2, flow: flows[c.flow] || null }; });
+  const by = {}; for (const x of recs) if (x) (by[x.d] || (by[x.d] = [])).push(x);
+  const hix = await getJ(env, "camp_handover_index", []), cids = new Set(P.runs.map((r) => r.c.id)), ho = new Set(hix.filter((h) => cids.has(h.cid)).map((h) => DIG(h.d)));
+  const people = await pmap(Object.keys(by), 16, async (d) => {
+    const [k, oo] = await Promise.all([getJ(env, "camp_contact_" + d, null), env.MEETINGS.get("camp_optout_" + d)]);
+    return simplePerson(d, by[d], k, !!oo, ho.has(d)); });
+  return { people, messages: pairs.length };
+}
+async function simpleBody(env, key, rk, now, want, owner, viewer) {
+  const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");
+  const ids = await getJ(env, "camp_index", []);
+  const camps = (await pmap(ids, 12, async (id) => { const [c, s] = await Promise.all([getJ(env, "camp_" + id, null), getJ(env, "camp_stats_" + id, {})]); return c ? { c, S: Object.assign(blankStats(), s) } : null; })).filter(Boolean);
+  const parents = await buildParents(env, camps);
+  const nav = '<a class=back href="/momo' + q + '">&#8592; Momo</a><div class=tag>MOMO</div><h1>Campaigns</h1>';
+  const P = want ? pickParent(parents, want) : null;
+  if (!P || (want && P.id !== want && !P.runs.some((r) => r.c.id === want))) return nav + await simpleList(env, q, parents, viewer) + DASH_CSS + SIMPLE_CSS;
+  const { people } = await simpleData(env, P);
+  await Promise.all(P.runs.map((r) => markSeen(env, viewer, r.c.id, r.S, now)));
+  const n = (k) => people.filter((p) => p.kind === k).length, notDel = people.filter((p) => p.failed).length;
+  const replied = people.filter((p) => p.replied).sort((a, b) => (a.at < b.at ? 1 : -1));
+  const quiet = people.filter((p) => !p.replied).sort((a, b) => (a.dnc - b.dnc) || String(a.name || "~").localeCompare(String(b.name || "~")));
+  const counts = '<div class=sct><div class=sbig><b>' + people.length + '</b><i>sent</i></div><div class=srow>'
+    + [["positive", n("positive")], ["dnc", n("dnc")], ["other", n("other")], ["none", n("none")]].map(([k, v]) => '<div><b style="color:' + KIND[k][1] + '">' + v + '</b><i>' + esc(KIND[k][0]) + '</i></div>').join("") + '</div>'
+    + (notDel ? '<p class=snd>' + notDel + ' of the ' + people.length + ' were not delivered by WhatsApp (its limit on marketing messages). Your own WhatsApp still reaches them.</p>' : "") + '</div>';
+  return '<a class=back href="/momo/campaigns' + q + '">&#8592; Campaigns</a><div class=tag>MOMO</div><h1 class=sh1>' + esc(niceTitle(P)) + '</h1>' + counts
+    + '<h2 class=sh2>Replied (' + replied.length + ')</h2>' + (replied.length ? replied.map((p) => simpleRow(p, true)).join("") : '<p class=nd>Nobody has replied yet.</p>')
+    + '<h2 class=sh2>Did not reply (' + quiet.length + ')</h2>' + (quiet.length ? quiet.map((p) => simpleRow(p, false)).join("") : '<p class=nd>Everyone replied.</p>')
+    + (owner ? '<p class=sown><a href="/momo/campaigns' + q + '&c=' + encodeURIComponent(P.id) + '&full=1">Owner tools (runs, audience, contacts)</a></p>' : "")
+    + DASH_CSS + SIMPLE_CSS;
+}
+const SIMPLE_CSS = '<style>.sl{display:block;border:1px solid ' + LINE + ';background:#FFFDF9;border-radius:14px;padding:12px 14px;margin-bottom:8px;text-decoration:none;min-width:0}.slt{display:block;font:600 1rem Fraunces,serif;color:' + TEAL + ';overflow-wrap:anywhere}.slm{display:block;font:500 .74rem "IBM Plex Sans",sans-serif;color:' + MUTE + ';margin:2px 0 4px}'
+  + '.stest{margin-top:14px}.stest summary{font:600 .85rem "IBM Plex Sans",sans-serif;color:' + MUTE + ';cursor:pointer;padding:6px 0}.sh1{overflow-wrap:anywhere}.sh2{font:600 1rem Fraunces,serif;color:' + TEAL + ';margin:18px 0 8px}'
+  + '.sct{border:1px solid ' + LINE + ';background:#FFFDF9;border-radius:14px;padding:12px}.sbig b{font:600 2rem Fraunces,serif;color:' + TEAL + '}.sbig i{font:500 .85rem "IBM Plex Sans",sans-serif;font-style:normal;color:' + MUTE + ';margin-left:6px}'
+  + '.srow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}.srow div{border:1px solid ' + LINE + ';border-radius:10px;padding:8px 2px;text-align:center;min-width:0}.srow b{display:block;font:600 1.2rem Fraunces,serif}.srow i{font-style:normal;font-size:.64rem;color:' + MUTE + ';line-height:1.15;display:block}'
+  + '.snd{margin:8px 0 0;font-size:.74rem;color:' + MUTE + '}.sp{display:flex;align-items:center;gap:10px;border:1px solid ' + LINE + ';background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;min-width:0}.sp.dn{background:#FBF1EF;border-color:#E9C9C2}'
+  + '.spm{flex:1;min-width:0}.spm b{display:block;color:' + INK + ';font:600 .9rem "IBM Plex Sans",sans-serif;overflow-wrap:anywhere}.spn{display:block;font:500 .72rem "IBM Plex Mono",monospace;color:' + MUTE + '}.spk{display:block;font:700 .66rem "IBM Plex Sans",sans-serif;text-transform:uppercase;letter-spacing:.04em;margin-top:4px}'
+  + '.spt{margin:2px 0 0;font-size:.84rem;color:' + INK + ';overflow-wrap:anywhere}.swa{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:#1F8A4C;color:#fff;border-radius:999px;padding:9px 13px;font:700 .8rem "IBM Plex Sans",sans-serif;text-decoration:none;white-space:nowrap}'
+  + '.sdnc{flex:0 0 auto;font:700 .68rem "IBM Plex Sans",sans-serif;color:' + RED + ';border:1.3px solid ' + RED + ';border-radius:999px;padding:5px 9px;white-space:nowrap}.sown{margin-top:22px;font-size:.78rem}.sown a{color:' + MUTE + '}</style>';
+
 async function dashBody(env, key, rk, now, want, owner, viewer) {
   viewer = viewer || (owner ? "kendall" : "najjuko");
   const q = "?key=" + encodeURIComponent(key) + (rk ? "&rk=" + encodeURIComponent(rk) : "");

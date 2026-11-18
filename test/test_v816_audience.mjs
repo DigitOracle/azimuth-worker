@@ -50,7 +50,7 @@ const lr = (await C.audienceRows(env, c1, Date.now())).rows;
 ok(lr[0].status === "replied" && lr[0].why === "already_sent" && lr[1].status === "queued", "once live: replied / queued per row");
 ok(h.includes("chp st'>replied") && h.includes("chp st'>queued") && /Sent so far/.test(h), "statuses on the page");
 // the campaign card links (owner)
-h = await (await get("/momo/campaigns?c=c1", KEN)).text();
+h = await (await get("/momo/campaigns?c=c1&full=1", KEN)).text();   // v841 - the owner links live on the full view
 ok(h.includes("id=aud_link") && h.includes("/momo/campaigns/contacts"), "the campaign card has Who gets this and Contacts");
 ok(!(await (await get("/momo/campaigns?c=c1", NAJ)).text()).includes("id=aud_link"), "not for Najjuko's key");
 // Contacts: filter, import, opt-out flag, soft remove + restore; the sender skips a removed contact

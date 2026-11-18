@@ -63,9 +63,11 @@ export async function personRollup(env, runs) {
   for (const { c, S } of runs) {
     const ws = await getJ(env, "camp_msgs_" + c.id, []);
     refused += Math.max(0, ((S && S.sent) || 0) - ws.length);   // refused at send time: no message id, no person to attach it to
-    for (const w of ws) {
-      const m = await getJ(env, "camp_msg_" + w, null); if (!m || !m.d) continue;
-      const s2 = await getJ(env, "camp_state_" + c.id + "_" + m.d, null);
+    // v841 - fetched in parallel batches (one read after another took minutes on a phone), then folded in the original order
+    const got = []; for (let i = 0; i < ws.length; i += 24) got.push(...await Promise.all(ws.slice(i, i + 24).map(async (w) => { const m = await getJ(env, "camp_msg_" + w, null);
+      return [w, m, m && m.d ? await getJ(env, "camp_state_" + c.id + "_" + m.d, null) : null]; })));
+    for (const [w, m, s2] of got) {
+      if (!m || !m.d) continue;
       const st = (s2 && s2.path && s2.path.length) || m.replied || m.tap ? "replied" : m.read ? "read" : m.delivered ? "delivered" : m.st === "failed" ? "failed" : "sent";
       const p = per[m.d], at = String((s2 && s2.at) || m.at || "");
       if (!p || RANK[st] > RANK[p.st] || (RANK[st] === RANK[p.st] && at > p.at)) per[m.d] = { d: m.d, st, at, cid: c.id, w, m, s2, optout: (p && p.optout) || !!m.optout };

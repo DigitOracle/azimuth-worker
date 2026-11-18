@@ -263,7 +263,7 @@ r = await get("/momo/campaigns?c=pja", NAJ); t = await r.text();
 ok(r.status === 200 && t.includes("<h1>Campaigns</h1>") && ["Funnel", "Branch choices", "Daily sends and replies", "Opt-out and block rate", "Clicks per link", "People ("].every((x) => t.includes(x)), "dashboard has every chart card", r.status);
 ok((t.match(/<svg/g) || []).length >= 6 && t.includes("0.5% stop line") && t.includes("daily cap 10") && t.includes("To Najjuko"), "inline SVG charts with the stop line and cap labelled");
 ok(t.includes("+971 ••• 0011") && !t.includes("971500000011"), "numbers masked to the last 4 digits");
-ok(!t.includes("Approve live") && (t.includes(">Pause<") || t.includes(">Done<")), "no approve button for her");
+ok(!t.includes("Approve live") && !t.includes(">Pause<"), "no approve button for her (v841: her campaign page has no run controls at all)");
 ok(t.includes("Consent to updates") && t.includes("Follow up"), "totals + follow-up buttons");
 r = await post("/momo/campaigns/api", NAJ, { action: "followup", id: "pja", w: pids[3] }); j = await r.json();
 ok(j.ok && JSON.parse(store.get("camp_handover_index"))[0].kind === "follow_up", "Follow up flags it for her; nothing sent", j);
