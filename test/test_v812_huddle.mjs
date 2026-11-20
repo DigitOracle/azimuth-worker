@@ -163,7 +163,7 @@ ok(page.includes("Her own meeting") && page.includes("Minutes (PDF)") && page.in
 
 // Work home: MY TASKS first, quick actions, meetings, draft chip; the post queue no longer pops up
 page = await (await get("/momo/work")).text();
-ok(page.indexOf("MY TASKS") < page.indexOf("What did you do?") && /\d+ open · \d+ due today/.test(page) && page.includes("+ Quick task") && page.includes("All meetings"), "Work home order");
+ok(page.indexOf("MY TASKS") < page.indexOf("What did you do?") && /\d+ (open|now) · \d+ due today/.test(page) && page.includes("+ Quick task") && page.includes("All meetings"), "Work home order");
 j = await post("/momo/work/api", { action: "task_snooze", name: "Send the brochure" });
 ok(j.ok && j.task.due > "2026-11-08", "Tomorrow snoozes a task by a day");
 const ms = (await import("node:fs")).readFileSync(new URL("../src/meeting_sync.js", import.meta.url), "utf8");

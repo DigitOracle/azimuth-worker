@@ -43,7 +43,7 @@ ok(!/Claude|Anthropic|OpenAI|GPT/i.test(rep.replace(/data:image\/[^"']+/g, "")),
 const ed = await (await req("/momo/work/api", true, { action: "save", entry: { ...sv.entry, title: "Huddle 1" }, id: sv.entry.id, date: "2026-10-13", oldDate: "2026-10-12", created: sv.entry.created })).json();
 ok(ed.ok && !store.has("work_naj_2026-10-12_" + sv.entry.id) && store.has("work_naj_2026-10-13_" + sv.entry.id), "editing the date moves the entry, never duplicates it");
 await req("/momo/work/api", true, { action: "delete", id: sv.entry.id, date: "2026-10-13" });
-ok(![...store.keys()].some((k) => k.startsWith("work_naj_")), "delete removes it");
+ok(![...store.keys()].some((k) => k.startsWith("work_naj_") && k !== "work_naj_gone_index"), "delete removes it");   // v842 - the gone list remembers it
 // the page script parses
 const js = await (await req("/momo/work.js", true)).text();
 try { new Function(js); pass++; } catch (e) { fail++; console.log("FAIL the work page script does not parse", e.message); }
